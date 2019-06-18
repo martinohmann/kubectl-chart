@@ -1,0 +1,4 @@
+.cover
+coverage.txt
+/vendor
+/kubectl-chart
