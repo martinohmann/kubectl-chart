@@ -5,14 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/martinohmann/kubectl-chart/pkg/cmdutil"
 	"github.com/martinohmann/kubectl-chart/pkg/version"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
 
-func NewCmdVersion(streams genericclioptions.IOStreams) *cobra.Command {
+func NewVersionCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewVersionOptions(streams)
 
 	cmd := &cobra.Command{
