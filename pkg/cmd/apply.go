@@ -9,7 +9,6 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
-	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,6 +33,7 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
+			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
 		},
 	}
@@ -48,14 +48,11 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 
 type ApplyOptions struct {
 	genericclioptions.IOStreams
-	*ChartFlags
+	*RenderOptions
 
 	DryRun       bool
 	ServerDryRun bool
-
-	RenderOptions *RenderOptions
-	Recorder      recorders.OperationRecorder
-	Serializer    chart.Serializer
+	Recorder     recorders.OperationRecorder
 
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
@@ -70,18 +67,20 @@ type ApplyOptions struct {
 func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 	return &ApplyOptions{
 		IOStreams:     streams,
-		ChartFlags:    &ChartFlags{},
 		RenderOptions: NewRenderOptions(streams),
 		Recorder:      recorders.NewOperationRecorder(),
-		Serializer:    yaml.NewSerializer(),
 	}
 }
 
-func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
+func (o *ApplyOptions) Validate() error {
 	if o.DryRun && o.ServerDryRun {
 		return errors.Errorf("--dry-run and --server-dry-run can't be used together")
 	}
 
+	return nil
+}
+
+func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
 
 	o.BuilderFactory = func() *resource.Builder {
@@ -117,14 +116,11 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.RenderOptions.ChartFlags = o.ChartFlags
-	o.RenderOptions.Namespace = o.Namespace
-
 	return nil
 }
 
 func (o *ApplyOptions) Run() error {
-	err := o.RenderOptions.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	err := o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
@@ -134,22 +130,24 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
+		// We need to use a tempfile here instead of a stream as
+		// apply.ApplyOption requires that and we do not want to duplicate its
+		// huge Run() method to override this.
 		f, err := ioutil.TempFile("", config.Name)
 		if err != nil {
 			return err
 		}
 
-		defer os.Remove(f.Name())
+		defer f.Close()
 
 		err = ioutil.WriteFile(f.Name(), buf, 0644)
 		if err != nil {
 			return err
 		}
 
-		applier := o.createApplier(&applyConfig{
-			ChartName: config.Name,
-			Filename:  f.Name(),
-		})
+		defer os.Remove(f.Name())
+
+		applier := o.createApplier(config.Name, f.Name())
 
 		return applier.Run()
 	})
@@ -166,7 +164,7 @@ type applyConfig struct {
 	Filename  string
 }
 
-func (o *ApplyOptions) createApplier(config *applyConfig) *apply.ApplyOptions {
+func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOptions {
 	return &apply.ApplyOptions{
 		IOStreams:    o.IOStreams,
 		DryRun:       o.DryRun,
@@ -174,7 +172,7 @@ func (o *ApplyOptions) createApplier(config *applyConfig) *apply.ApplyOptions {
 		Overwrite:    true,
 		OpenAPIPatch: true,
 		Prune:        true,
-		Selector:     fmt.Sprintf("%s=%s", chart.LabelName, config.ChartName),
+		Selector:     fmt.Sprintf("%s=%s", chart.LabelName, chartName),
 		DeleteOptions: &delete.DeleteOptions{
 			Cascade:         true,
 			GracePeriod:     -1,
@@ -182,7 +180,7 @@ func (o *ApplyOptions) createApplier(config *applyConfig) *apply.ApplyOptions {
 			Timeout:         time.Duration(0),
 			WaitForDeletion: false,
 			FilenameOptions: resource.FilenameOptions{
-				Filenames: []string{config.Filename},
+				Filenames: []string{filename},
 				Recursive: false,
 			},
 		},
@@ -208,6 +206,10 @@ func (o *ApplyOptions) createApplier(config *applyConfig) *apply.ApplyOptions {
 
 			p := &kprinters.NamePrinter{Operation: printOperation}
 
+			// Wrap the printer to keep track of the executed operations for
+			// each object. We need that later on to perform additonal tasks.
+			// Sadly, we have to do this for now to avoid duplicating most of
+			// the logic of apply.ApplyOptions.
 			return printers.NewRecordingPrinter(o.Recorder, operation, p), nil
 		},
 	}

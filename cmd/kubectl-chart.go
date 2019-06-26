@@ -12,7 +12,7 @@ import (
 
 var (
 	rootCmd = &cobra.Command{
-		Use:           "kubectl chart",
+		Use:           "kubectl-chart",
 		Short:         "",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -31,6 +31,7 @@ func main() {
 	configFlags.AddFlags(rootCmd.PersistentFlags())
 
 	rootCmd.AddCommand(cmd.NewApplyCmd(configFlags, streams))
+	rootCmd.AddCommand(cmd.NewDeleteCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewRenderCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewVersionCmd(streams))
 

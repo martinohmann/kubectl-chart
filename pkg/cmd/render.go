@@ -22,6 +22,7 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
+			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
 		},
 	}
@@ -41,7 +42,7 @@ type RenderOptions struct {
 	Namespace string
 
 	chartProcessor *chart.Processor
-	serializer     chart.Serializer
+	Serializer     chart.Serializer
 }
 
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
@@ -49,16 +50,20 @@ func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 		IOStreams:      streams,
 		ChartFlags:     &ChartFlags{},
 		chartProcessor: chart.NewDefaultProcessor(),
-		serializer:     yaml.NewSerializer(),
+		Serializer:     yaml.NewSerializer(),
 	}
+}
+
+func (o *RenderOptions) Validate() error {
+	if o.HookType != "" && o.HookType != "all" && !chart.IsValidHookType(o.HookType) {
+		return chart.HookTypeError{Type: o.HookType, Additional: []string{"all"}}
+	}
+
+	return nil
 }
 
 func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
-
-	if o.HookType != "" && o.HookType != "all" && !chart.IsValidHookType(o.HookType) {
-		return chart.HookTypeError{Type: o.HookType, Additional: []string{"all"}}
-	}
 
 	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
@@ -74,12 +79,12 @@ func (o *RenderOptions) Run() error {
 			return err
 		}
 
-		objs, err := o.filterRenderResources(resources, hooks)
+		objs, err := o.selectResources(resources, hooks)
 		if err != nil {
 			return err
 		}
 
-		buf, err := o.serializer.Encode(objs)
+		buf, err := o.Serializer.Encode(objs)
 		if err != nil {
 			return err
 		}
@@ -126,7 +131,7 @@ func (o *RenderOptions) Visit(fn func(config *chart.Config, resources, hooks []r
 	return err
 }
 
-func (o *RenderOptions) filterRenderResources(resources, hooks []runtime.Object) ([]runtime.Object, error) {
+func (o *RenderOptions) selectResources(resources, hooks []runtime.Object) ([]runtime.Object, error) {
 	if o.HookType == "" {
 		return resources, nil
 	}
