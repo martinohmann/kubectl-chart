@@ -102,10 +102,6 @@ func (o *DeleteOptions) createDeleter(chartName string, stream io.Reader) (*dele
 		ContinueOnError().
 		NamespaceParam(o.Namespace).DefaultNamespace().
 		Stream(stream, chartName).
-		// FilenameParam(o.EnforceNamespace, &resource.FilenameOptions{
-		// 	Filenames: []string{config.Filename},
-		// 	Recursive: false,
-		// }).
 		RequireObject(false).
 		Do()
 
