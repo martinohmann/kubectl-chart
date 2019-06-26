@@ -22,27 +22,23 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
-			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
 		},
 	}
 
-	cmd.Flags().StringVar(&o.ChartDir, "chart-dir", o.ChartDir, "Directory of the helm chart that should be rendered")
+	o.ChartFlags.AddFlags(cmd)
+
 	cmd.Flags().StringVar(&o.HookType, "hook", o.HookType, "If provided hooks with given type will be rendered")
-	cmd.Flags().BoolVarP(&o.Recursive, "recursive", "R", o.Recursive, "If set all charts in --chart-dir will be recursively rendered")
-	cmd.Flags().StringArrayVar(&o.ValueFiles, "value-file", o.ValueFiles, "File that should be merged onto the chart values before rendering")
 
 	return cmd
 }
 
 type RenderOptions struct {
 	genericclioptions.IOStreams
+	*ChartFlags
 
-	ChartDir   string
-	Recursive  bool
-	HookType   string
-	ValueFiles []string
-	Namespace  string
+	HookType  string
+	Namespace string
 
 	chartProcessor *chart.Processor
 	serializer     chart.Serializer
@@ -51,21 +47,18 @@ type RenderOptions struct {
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 	return &RenderOptions{
 		IOStreams:      streams,
+		ChartFlags:     &ChartFlags{},
 		chartProcessor: chart.NewDefaultProcessor(),
 		serializer:     yaml.NewSerializer(),
 	}
 }
 
-func (o *RenderOptions) Validate() error {
+func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
+	var err error
+
 	if o.HookType != "" && o.HookType != "all" && !chart.IsValidHookType(o.HookType) {
 		return chart.HookTypeError{Type: o.HookType, Additional: []string{"all"}}
 	}
-
-	return nil
-}
-
-func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
-	var err error
 
 	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
@@ -76,6 +69,28 @@ func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
 }
 
 func (o *RenderOptions) Run() error {
+	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+		if err != nil {
+			return err
+		}
+
+		objs, err := o.filterRenderResources(resources, hooks)
+		if err != nil {
+			return err
+		}
+
+		buf, err := o.serializer.Encode(objs)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprint(o.Out, string(buf))
+
+		return nil
+	})
+}
+
+func (o *RenderOptions) Visit(fn func(config *chart.Config, resources, hooks []runtime.Object, err error) error) error {
 	values, err := chart.LoadValues(o.ValueFiles...)
 	if err != nil {
 		return err
@@ -87,22 +102,25 @@ func (o *RenderOptions) Run() error {
 	}
 
 	for _, config := range configs {
+		if len(o.ChartFilter) > 0 && !contains(o.ChartFilter, config.Name) {
+			continue
+		}
+
 		resources, hooks, err := o.chartProcessor.Process(config)
 		if err != nil {
 			return errors.Wrapf(err, "while processing chart %q", config.Name)
 		}
 
-		objs, err := o.filterRenderResources(resources, hooks)
 		if err != nil {
+			if fnErr := fn(config, resources, hooks, err); fnErr != nil {
+				return fnErr
+			}
+			continue
+		}
+
+		if err := fn(config, resources, hooks, nil); err != nil {
 			return err
 		}
-
-		buf, err := o.serializer.Encode(objs)
-		if err != nil {
-			return nil
-		}
-
-		fmt.Fprint(o.Out, string(buf))
 	}
 
 	return err
@@ -151,4 +169,14 @@ func (o *RenderOptions) buildChartConfigs(values map[string]interface{}) ([]*cha
 	}
 
 	return configs, nil
+}
+
+func contains(s []string, v string) bool {
+	for _, u := range s {
+		if u == v {
+			return true
+		}
+	}
+
+	return false
 }
