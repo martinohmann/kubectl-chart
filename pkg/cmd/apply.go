@@ -60,7 +60,6 @@ type ApplyOptions struct {
 	Mapper          meta.RESTMapper
 	BuilderFactory  func() *resource.Builder
 
-	Namespace        string
 	EnforceNamespace bool
 }
 
@@ -94,6 +93,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 
 	config, err := f.ToRESTConfig()
 	if err != nil {
+		return err
 	}
 
 	o.DynamicClient, err = dynamic.NewForConfig(config)
