@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: {{ include "testchart.fullname" . }}
+  annotations:
+    kubectl-chart.io/hook: {{ .Values.hookType }}
+  labels:
+    app.kubernetes.io/name: {{ include "testchart.name" . }}
+    helm.sh/chart: {{ include "testchart.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  containers:
+    - name: {{ .Chart.Name }}
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP

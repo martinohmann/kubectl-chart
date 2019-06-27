@@ -31,12 +31,7 @@ func IsValidHookType(typ string) bool {
 }
 
 func IsHook(obj runtime.Object) (bool, error) {
-	u, ok := obj.(*unstructured.Unstructured)
-	if !ok {
-		return false, errors.Errorf("illegal object type: %T", obj)
-	}
-
-	value, found, err := unstructured.NestedString(u.Object, "metadata", "annotations", AnnotationHook)
+	value, found, err := getHookAnnotation(obj)
 	if err != nil {
 		return false, err
 	}
@@ -53,15 +48,14 @@ func IsHook(obj runtime.Object) (bool, error) {
 }
 
 func FilterHooks(typ string, hooks ...runtime.Object) ([]runtime.Object, error) {
+	if !IsValidHookType(typ) {
+		return nil, HookTypeError{Type: typ}
+	}
+
 	filtered := make([]runtime.Object, 0)
 
 	for _, obj := range hooks {
-		u, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			return nil, errors.Errorf("illegal object type: %T", obj)
-		}
-
-		value, found, err := unstructured.NestedString(u.Object, "metadata", "annotations", AnnotationHook)
+		value, found, err := getHookAnnotation(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -91,4 +85,13 @@ func (e HookTypeError) Error() string {
 	}
 
 	return msg
+}
+
+func getHookAnnotation(obj runtime.Object) (string, bool, error) {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return "", false, errors.Errorf("illegal object type: %T", obj)
+	}
+
+	return unstructured.NestedString(u.Object, "metadata", "annotations", AnnotationHook)
 }
