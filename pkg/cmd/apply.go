@@ -152,10 +152,6 @@ func (o *ApplyOptions) Run() error {
 		return applier.Run()
 	})
 
-	objs := o.Recorder.GetRecordedObjects()
-
-	fmt.Fprintf(o.Out, "%#v\n", objs)
-
 	return err
 }
 
@@ -194,7 +190,6 @@ func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOpt
 		Mapper:           o.Mapper,
 		Namespace:        o.Namespace,
 		EnforceNamespace: o.EnforceNamespace,
-		// allow for a success message operation to be specified at print time
 		ToPrinter: func(operation string) (kprinters.ResourcePrinter, error) {
 			printOperation := operation
 			if o.DryRun {
