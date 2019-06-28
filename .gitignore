@@ -2,4 +2,3 @@
 coverage.txt
 /vendor
 /kubectl-chart
-/kubectl-chart-differ

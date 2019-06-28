@@ -34,7 +34,6 @@ func main() {
 	rootCmd.AddCommand(cmd.NewDeleteCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewRenderCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewDiffCmd(configFlags, streams))
-	rootCmd.AddCommand(cmd.NewDifferCmd("differ", streams))
 	rootCmd.AddCommand(cmd.NewVersionCmd(streams))
 
 	cmdutil.CheckErr(rootCmd.Execute())

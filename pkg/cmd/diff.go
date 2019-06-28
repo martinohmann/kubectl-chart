@@ -1,22 +1,23 @@
 package cmd
 
 import (
-	"fmt"
-	"io/ioutil"
-	"os"
+	"bytes"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
+	"github.com/martinohmann/kubectl-chart/pkg/filediff"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/apply"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/diff"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/util/openapi"
-	"k8s.io/utils/exec"
+	"k8s.io/kubernetes/pkg/kubectl/scheme"
 )
 
 func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
@@ -95,70 +96,95 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	return nil
 }
 
-func (o *DiffOptions) createDiffer(filename string) *diff.DiffOptions {
-	return &diff.DiffOptions{
-		ServerSideApply: false,
-		ForceConflicts:  false,
-		Diff: &diff.DiffProgram{
-			Exec:      exec.New(),
-			IOStreams: o.IOStreams,
-		},
-		FilenameOptions: resource.FilenameOptions{
-			Filenames: []string{filename},
-		},
-		DynamicClient:    o.DynamicClient,
-		OpenAPISchema:    o.OpenAPISchema,
-		DiscoveryClient:  o.DiscoveryClient,
-		DryRunVerifier:   o.DryRunVerifier,
-		CmdNamespace:     o.Namespace,
-		EnforceNamespace: o.EnforceNamespace,
-		Builder:          o.BuilderFactory(),
-	}
-}
-
 func (o *DiffOptions) Run() error {
-	diffResources := make([]runtime.Object, 0)
-
-	err := o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(o.Out, "%#v\n", resources)
+		return o.diffResources(resources)
+	})
+}
 
-		diffResources = append(diffResources, resources...)
+// Number of times we try to diff before giving-up
+const maxRetries = 4
 
-		return nil
+func (o *DiffOptions) diffResources(resources []runtime.Object) error {
+	buf, err := o.Serializer.Encode(resources)
+	if err != nil {
+		return err
+	}
+
+	differ, err := diff.NewDiffer("LIVE", "MERGED")
+	if err != nil {
+		return err
+	}
+
+	defer differ.TearDown()
+
+	printer := diff.Printer{}
+
+	r := o.BuilderFactory().
+		Unstructured().
+		NamespaceParam(o.Namespace).DefaultNamespace().
+		Stream(bytes.NewBuffer(buf), "stream").
+		Flatten().
+		Do()
+	if err := r.Err(); err != nil {
+		return err
+	}
+
+	err = r.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if err := o.DryRunVerifier.HasSupport(info.Mapping.GroupVersionKind); err != nil {
+			return err
+		}
+
+		local := info.Object.DeepCopyObject()
+
+		for i := 1; i <= maxRetries; i++ {
+			if err = info.Get(); err != nil {
+				if !errors.IsNotFound(err) {
+					return err
+				}
+				info.Object = nil
+			}
+
+			force := i == maxRetries
+			if force {
+				klog.Warningf(
+					"Object (%v: %v) keeps changing, diffing without lock",
+					info.Object.GetObjectKind().GroupVersionKind(),
+					info.Name,
+				)
+			}
+
+			obj := diff.InfoObject{
+				LocalObj: local,
+				Info:     info,
+				Encoder:  scheme.DefaultJSONEncoder(),
+				OpenAPI:  o.OpenAPISchema,
+				Force:    force,
+			}
+
+			err = differ.Diff(obj, printer)
+			if !errors.IsConflict(err) {
+				break
+			}
+		}
+
+		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	buf, err := o.Serializer.Encode(diffResources)
-	if err != nil {
-		return err
-	}
+	fd := filediff.NewDiffer(differ.From.Dir.Name, differ.To.Dir.Name)
 
-	// We need to use a tempfile here instead of a stream as
-	// apply.ApplyOption requires that and we do not want to duplicate its
-	// huge Run() method to override this.
-	f, err := ioutil.TempFile("", "kubectl-chart")
-	if err != nil {
-		return err
-	}
+	_, err = fd.WriteTo(o.Out)
 
-	defer f.Close()
-
-	err = ioutil.WriteFile(f.Name(), buf, 0644)
-	if err != nil {
-		return err
-	}
-
-	defer os.Remove(f.Name())
-
-	os.Setenv("KUBECTL_EXTERNAL_DIFF", "kubectl-chart-internaldiff")
-
-	differ := o.createDiffer(f.Name())
-
-	return differ.Run()
+	return err
 }

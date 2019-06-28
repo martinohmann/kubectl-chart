@@ -60,7 +60,7 @@ require (
 	k8s.io/cli-runtime v0.0.0-20190314001948-2899ed30580f
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/helm v2.14.1+incompatible
-	k8s.io/klog v0.3.3 // indirect
+	k8s.io/klog v0.3.3
 	k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30 // indirect
 	k8s.io/kubernetes v1.14.3
 	k8s.io/utils v0.0.0-20190607212802-c55fbcfc754a
