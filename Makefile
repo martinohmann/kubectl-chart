@@ -12,7 +12,7 @@ deps: ## install go deps
 
 
 .PHONY: build
-build: build-kubectl-chart build-kubectl-chart-internaldiff
+build: build-kubectl-chart build-kubectl-chart-differ
 
 .PHONY: build-kubectl-chart
 build-kubectl-chart: ## build kubectl-chart
@@ -21,18 +21,19 @@ build-kubectl-chart: ## build kubectl-chart
 			-X $(PKG_NAME)/pkg/version.gitVersion=$$(git describe --tags 2>/dev/null || echo v0.0.0-master) \
 			-X $(PKG_NAME)/pkg/version.gitCommit=$$(git rev-parse HEAD) \
 			-X $(PKG_NAME)/pkg/version.buildDate=$$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-		./cmd/*.go
+		-o kubectl-chart \
+		./cmd/chart
 
-.PHONY: build-kubectl-chart-internaldiff
-build-kubectl-chart-internaldiff: ## build kubectl-chart-internaldiff
+.PHONY: build-kubectl-chart-differ
+build-kubectl-chart-differ: ## build kubectl-chart-differ
 	go build \
 		-ldflags "-s -w" \
-		-o kubectl-chart-internaldiff \
-		./cmd/internaldiff
+		-o kubectl-chart-differ \
+		./cmd/chart-differ
 
 .PHONY: install
 install: build ## install kubectl-chart
-	cp kubectl-chart{,-internaldiff} $(GOPATH)/bin/
+	cp kubectl-chart{,-differ} $(GOPATH)/bin/
 
 .PHONY: test
 test: ## run tests

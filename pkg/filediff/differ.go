@@ -1,7 +1,7 @@
-package main
+package filediff
 
 import (
-	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,64 +10,79 @@ import (
 	"github.com/martinohmann/go-difflib/difflib"
 )
 
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, "usage: %s [from] [to]\n", filepath.Base(os.Args[0]))
-		os.Exit(2)
-	}
-
-	differ := newDiffer(os.Args[1], os.Args[2])
-
-	n, err := differ.diff()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-
-	if n > 0 {
-		// Exit with status 1 to indicate that there are changes
-		os.Exit(1)
-	}
+type Options struct {
+	Context int
+	Color   bool
 }
 
-type differ struct {
+type Differ struct {
 	from, to string
+	options  Options
 }
 
-func newDiffer(from, to string) *differ {
-	return &differ{
-		from: from,
-		to:   to,
+var DefaultOptions = Options{Context: 10, Color: true}
+
+func NewDiffer(from, to string) *Differ {
+	return NewDifferWithOptions(from, to, DefaultOptions)
+}
+
+func NewDifferWithOptions(from, to string, options Options) *Differ {
+	return &Differ{
+		from:    from,
+		to:      to,
+		options: options,
 	}
 }
 
-func (d *differ) diff() (int, error) {
-	var diffBytes int
-
-	fromFiles, err := getFileInfos(d.from)
+func (d *Differ) WriteTo(w io.Writer) (int64, error) {
+	fromInfo, err := os.Stat(d.from)
 	if err != nil {
 		return 0, err
 	}
 
-	toFiles, err := getFileInfos(d.to)
+	toInfo, err := os.Stat(d.to)
 	if err != nil {
 		return 0, err
 	}
+
+	if !fromInfo.IsDir() && !toInfo.IsDir() {
+		p := pair{
+			A: &fileInfo{
+				AbsPath: d.from,
+				Base:    filepath.Base(d.from),
+			},
+			B: &fileInfo{
+				AbsPath: d.to,
+				Base:    filepath.Base(d.to),
+			},
+		}
+
+		return p.WriteTo(w)
+	}
+
+	fromFiles, err := getFileInfos(d.from, fromInfo)
+	if err != nil {
+		return 0, err
+	}
+
+	toFiles, err := getFileInfos(d.to, toInfo)
+	if err != nil {
+		return 0, err
+	}
+
+	var n int64
 
 	for _, p := range pairs(fromFiles, toFiles) {
-		out, err := p.diff()
+		nn, err := p.WriteTo(w)
+
+		n += nn
+
 		if err != nil {
-			return diffBytes, err
-		}
-
-		diffBytes += len(out)
-
-		if len(out) > 0 {
-			fmt.Println(out)
+			return n, err
 		}
 	}
 
-	return diffBytes, nil
+	return n, nil
 }
 
 type fileInfo struct {
@@ -91,7 +106,7 @@ func (f fileInfos) findMatching(needle fileInfo) (fileInfo, bool) {
 	return fileInfo{}, false
 }
 
-func walkDir(dir string) ([]fileInfo, error) {
+func collectFileInfos(dir string) ([]fileInfo, error) {
 	fileInfos := make([]fileInfo, 0)
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -110,22 +125,18 @@ func walkDir(dir string) ([]fileInfo, error) {
 
 		fileInfos = append(fileInfos, fileInfo{
 			AbsPath: absPath,
-			Base:    trimPrefixDir(dir, path),
+			Base:    trimDirPrefix(dir, path),
 		})
 
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
-	return fileInfos, nil
+	return fileInfos, err
 }
 
-func getFileInfos(path string) ([]fileInfo, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, err
+func getFileInfos(path string, info os.FileInfo) ([]fileInfo, error) {
+	if info.IsDir() {
+		return collectFileInfos(path)
 	}
 
 	absPath, err := filepath.Abs(path)
@@ -133,15 +144,27 @@ func getFileInfos(path string) ([]fileInfo, error) {
 		return nil, err
 	}
 
-	if info.IsDir() {
-		return walkDir(path)
+	fi := fileInfo{
+		AbsPath: absPath,
+		Base:    filepath.Base(path),
 	}
 
-	return []fileInfo{{AbsPath: absPath, Base: filepath.Base(path)}}, nil
+	return []fileInfo{fi}, nil
 }
 
 type pair struct {
 	A, B *fileInfo
+}
+
+func (p pair) WriteTo(w io.Writer) (int64, error) {
+	out, err := p.diff()
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := w.Write([]byte(out))
+
+	return int64(n), err
 }
 
 func (p pair) diff() (string, error) {
@@ -203,6 +226,6 @@ func pairs(from, to fileInfos) []pair {
 	return pairs
 }
 
-func trimPrefixDir(dir, path string) string {
+func trimDirPrefix(dir, path string) string {
 	return strings.TrimPrefix(path, filepath.Clean(dir)+"/")
 }
