@@ -39,9 +39,11 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 	}
 
 	o.ChartFlags.AddFlags(cmd)
+	o.DiffFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.ServerDryRun, "server-dry-run", o.ServerDryRun, "If true, request will be sent to server with dry-run flag, which means the modifications won't be persisted. This is an alpha feature and flag.")
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
+	cmd.Flags().BoolVar(&o.ShowDiff, "diff", o.ShowDiff, "If set, a diff for all resources will be displayed")
 
 	return cmd
 }
@@ -53,6 +55,9 @@ type ApplyOptions struct {
 	DryRun       bool
 	ServerDryRun bool
 	Recorder     recorders.OperationRecorder
+	ShowDiff     bool
+	DiffFlags    *DiffFlags
+	DiffOptions  *DiffOptions
 
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
@@ -67,6 +72,7 @@ func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 	return &ApplyOptions{
 		IOStreams:     streams,
 		RenderOptions: NewRenderOptions(streams),
+		DiffFlags:     NewDefaultDiffFlags(),
 		Recorder:      recorders.NewOperationRecorder(),
 	}
 }
@@ -81,6 +87,11 @@ func (o *ApplyOptions) Validate() error {
 
 func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
+
+	err = o.RenderOptions.Complete(f)
+	if err != nil {
+		return err
+	}
 
 	o.BuilderFactory = func() *resource.Builder {
 		return resource.NewBuilder(f)
@@ -116,13 +127,39 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
+	if !o.ShowDiff {
+		return nil
+	}
+
+	o.DiffOptions = &DiffOptions{
+		RenderOptions:    o.RenderOptions,
+		IOStreams:        o.IOStreams,
+		DynamicClient:    o.DynamicClient,
+		DiscoveryClient:  o.DiscoveryClient,
+		OpenAPISchema:    o.OpenAPISchema,
+		BuilderFactory:   o.BuilderFactory,
+		EnforceNamespace: o.EnforceNamespace,
+		DiffPrinter:      o.DiffFlags.ToPrinter(),
+		DryRunVerifier: &apply.DryRunVerifier{
+			Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
+			OpenAPIGetter: o.DiscoveryClient,
+		},
+	}
+
 	return nil
 }
 
 func (o *ApplyOptions) Run() error {
-	err := o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
+		}
+
+		if o.ShowDiff {
+			err = o.DiffOptions.Diff(config, resources, hooks)
+			if err != nil {
+				return err
+			}
 		}
 
 		buf, err := o.Serializer.Encode(resources)
@@ -151,13 +188,6 @@ func (o *ApplyOptions) Run() error {
 
 		return applier.Run()
 	})
-
-	return err
-}
-
-type applyConfig struct {
-	ChartName string
-	Filename  string
 }
 
 func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOptions {
@@ -168,7 +198,7 @@ func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOpt
 		Overwrite:    true,
 		OpenAPIPatch: true,
 		Prune:        true,
-		Selector:     fmt.Sprintf("%s=%s", chart.LabelName, chartName),
+		Selector:     chart.LabelSelector(chartName),
 		DeleteOptions: &delete.DeleteOptions{
 			Cascade:         true,
 			GracePeriod:     -1,

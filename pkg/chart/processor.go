@@ -4,23 +4,32 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// Processor type processes a chart config and renders the contained resources.
+// It will also perform post-processing on these resources.
 type Processor struct {
 	Parser *Parser
 }
 
+// NewProcessor creates a new *Processor values which uses given parser to
+// parse rendered chart templates.
 func NewProcessor(p *Parser) *Processor {
 	return &Processor{
 		Parser: p,
 	}
 }
 
+// NewDefaultProcessor creates a new *Processor value.
 func NewDefaultProcessor() *Processor {
 	return NewProcessor(NewYAMLParser())
 }
 
+// Process takes a chart config, renders and processes it. The first return
+// value contains all resources found in the rendered chart, whereas the second
+// return value contains all chart hooks.
 func (p *Processor) Process(config *Config) ([]runtime.Object, []runtime.Object, error) {
 	templates, err := Render(config)
 	if err != nil {
@@ -32,12 +41,12 @@ func (p *Processor) Process(config *Config) ([]runtime.Object, []runtime.Object,
 		return nil, nil, err
 	}
 
-	err = AddChartLabel(config.Name, resources...)
+	err = postProcessObjects(config, resources...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	err = AddChartLabel(config.Name, hooks...)
+	err = postProcessObjects(config, hooks...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -67,4 +76,18 @@ func (p *Processor) parseTemplates(templates map[string]string) ([]runtime.Objec
 	}
 
 	return resources, hooks, nil
+}
+
+func postProcessObjects(config *Config, objs ...runtime.Object) error {
+	err := resources.EnsureNamespaceSet(config.Namespace, objs...)
+	if err != nil {
+		return err
+	}
+
+	err = AddChartLabel(config.Name, objs...)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -4,7 +4,8 @@ import (
 	"bytes"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
-	"github.com/martinohmann/kubectl-chart/pkg/filediff"
+	"github.com/martinohmann/kubectl-chart/pkg/diff"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/apply"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/diff"
+	kdiff "k8s.io/kubernetes/pkg/kubectl/cmd/diff"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/util/openapi"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
@@ -33,6 +34,7 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 	}
 
 	o.ChartFlags.AddFlags(cmd)
+	o.DiffFlags.AddFlags(cmd)
 
 	return cmd
 }
@@ -41,11 +43,14 @@ type DiffOptions struct {
 	genericclioptions.IOStreams
 	*RenderOptions
 
+	DiffFlags *DiffFlags
+
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
 	OpenAPISchema   openapi.Resources
 	DryRunVerifier  *apply.DryRunVerifier
 	BuilderFactory  func() *resource.Builder
+	DiffPrinter     diff.Printer
 
 	EnforceNamespace bool
 }
@@ -54,11 +59,19 @@ func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 	return &DiffOptions{
 		IOStreams:     streams,
 		RenderOptions: NewRenderOptions(streams),
+		DiffFlags:     NewDefaultDiffFlags(),
 	}
 }
 
 func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
+
+	err = o.RenderOptions.Complete(f)
+	if err != nil {
+		return err
+	}
+
+	o.DiffPrinter = o.DiffFlags.ToPrinter()
 
 	o.BuilderFactory = func() *resource.Builder {
 		return resource.NewBuilder(f)
@@ -102,27 +115,39 @@ func (o *DiffOptions) Run() error {
 			return err
 		}
 
-		return o.diffResources(resources)
+		return o.Diff(config, resources, hooks)
 	})
+}
+
+func (o *DiffOptions) Diff(config *chart.Config, resources, hooks []runtime.Object) error {
+	err := o.diffRenderedResources(config, resources)
+	if err != nil {
+		return err
+	}
+
+	return o.diffRemovedResources(config, resources)
 }
 
 // Number of times we try to diff before giving-up
 const maxRetries = 4
 
-func (o *DiffOptions) diffResources(resources []runtime.Object) error {
-	buf, err := o.Serializer.Encode(resources)
+// diffRenderedResources retrieves information about all rendered resources and
+// produces a diff of potential changes. The resources are merged with live
+// object information to avoid showing diffs for generated fields.
+func (o *DiffOptions) diffRenderedResources(config *chart.Config, objs []runtime.Object) error {
+	buf, err := o.Serializer.Encode(objs)
 	if err != nil {
 		return err
 	}
 
-	differ, err := diff.NewDiffer("LIVE", "MERGED")
+	kdiffer, err := kdiff.NewDiffer("LIVE", "MERGED")
 	if err != nil {
 		return err
 	}
 
-	defer differ.TearDown()
+	defer kdiffer.TearDown()
 
-	printer := diff.Printer{}
+	kprinter := kdiff.Printer{}
 
 	r := o.BuilderFactory().
 		Unstructured().
@@ -162,7 +187,7 @@ func (o *DiffOptions) diffResources(resources []runtime.Object) error {
 				)
 			}
 
-			obj := diff.InfoObject{
+			obj := kdiff.InfoObject{
 				LocalObj: local,
 				Info:     info,
 				Encoder:  scheme.DefaultJSONEncoder(),
@@ -170,7 +195,7 @@ func (o *DiffOptions) diffResources(resources []runtime.Object) error {
 				Force:    force,
 			}
 
-			err = differ.Diff(obj, printer)
+			err = kdiffer.Diff(obj, kprinter)
 			if !errors.IsConflict(err) {
 				break
 			}
@@ -182,9 +207,59 @@ func (o *DiffOptions) diffResources(resources []runtime.Object) error {
 		return err
 	}
 
-	fd := filediff.NewDiffer(differ.From.Dir.Name, differ.To.Dir.Name)
+	differ := diff.NewPathDiffer(kdiffer.From.Dir.Name, kdiffer.To.Dir.Name)
 
-	_, err = fd.WriteTo(o.Out)
+	return differ.Print(o.DiffPrinter, o.Out)
+}
+
+// diffRemovedResources retrieves all resources matching the chart label from
+// the cluster and compares them to the rendered resources from the helm chart.
+// It will produce a deletion diff for resources that have been removed from
+// the helm chart but which are still present in the cluster.
+func (o *DiffOptions) diffRemovedResources(config *chart.Config, objs []runtime.Object) error {
+	r := o.BuilderFactory().
+		Unstructured().
+		AllNamespaces(true).
+		LabelSelectorParam(chart.LabelSelector(config.Name)).
+		ResourceTypeOrNameArgs(true, "all").
+		Flatten().
+		Do()
+	if err := r.Err(); err != nil {
+		return err
+	}
+
+	infos := make([]kdiff.Object, 0)
+
+	err := r.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			return err
+		}
+
+		infos = append(infos, kdiff.InfoObject{Info: info})
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, info := range infos {
+		_, found, err := resources.FindMatching(objs, info.Live())
+		if err != nil {
+			return err
+		}
+
+		if found {
+			continue
+		}
+
+		differ := diff.NewRemovalDiffer(info.Name(), info.Live())
+
+		err = differ.Print(o.DiffPrinter, o.Out)
+		if err != nil {
+			return err
+		}
+	}
 
 	return err
 }

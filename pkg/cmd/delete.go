@@ -60,6 +60,11 @@ func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
 
+	err = o.RenderOptions.Complete(f)
+	if err != nil {
+		return err
+	}
+
 	o.BuilderFactory = func() *resource.Builder {
 		return resource.NewBuilder(f)
 	}

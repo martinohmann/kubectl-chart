@@ -1,4 +1,4 @@
-package filediff
+package diff
 
 import (
 	"io"
@@ -6,83 +6,103 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/martinohmann/go-difflib/difflib"
 )
 
-type Options struct {
-	Context int
-	Color   bool
+// PathDiffer recursively diffs files in paths.
+type PathDiffer struct {
+	From, To string
 }
 
-type Differ struct {
-	from, to string
-	options  Options
-}
-
-var DefaultOptions = Options{Context: 10, Color: true}
-
-func NewDiffer(from, to string) *Differ {
-	return NewDifferWithOptions(from, to, DefaultOptions)
-}
-
-func NewDifferWithOptions(from, to string, options Options) *Differ {
-	return &Differ{
-		from:    from,
-		to:      to,
-		options: options,
+// NewPathDiffer creates a new PathDiffer for the two paths provided. If both paths are
+// files, it will just produce a diff of them. If either of the two is a
+// directory, the differ will recursively walk directories and diff all
+// contained files.
+func NewPathDiffer(from, to string) *PathDiffer {
+	return &PathDiffer{
+		From: from,
+		To:   to,
 	}
 }
 
-func (d *Differ) WriteTo(w io.Writer) (int64, error) {
-	fromInfo, err := os.Stat(d.from)
+// Print implements Differ. It writes diffs for all files in the from and to
+// paths to w using p.
+func (d *PathDiffer) Print(p Printer, w io.Writer) error {
+	fromInfo, err := os.Stat(d.From)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	toInfo, err := os.Stat(d.to)
+	toInfo, err := os.Stat(d.To)
 	if err != nil {
-		return 0, err
+		return err
 	}
+
+	var pairs []pair
 
 	if !fromInfo.IsDir() && !toInfo.IsDir() {
 		p := pair{
 			A: &fileInfo{
-				AbsPath: d.from,
-				Base:    filepath.Base(d.from),
+				AbsPath: d.From,
+				Base:    filepath.Base(d.From),
 			},
 			B: &fileInfo{
-				AbsPath: d.to,
-				Base:    filepath.Base(d.to),
+				AbsPath: d.To,
+				Base:    filepath.Base(d.To),
 			},
 		}
 
-		return p.WriteTo(w)
-	}
-
-	fromFiles, err := getFileInfos(d.from, fromInfo)
-	if err != nil {
-		return 0, err
-	}
-
-	toFiles, err := getFileInfos(d.to, toInfo)
-	if err != nil {
-		return 0, err
-	}
-
-	var n int64
-
-	for _, p := range pairs(fromFiles, toFiles) {
-		nn, err := p.WriteTo(w)
-
-		n += nn
-
+		pairs = []pair{p}
+	} else {
+		fromFiles, err := getFileInfos(d.From, fromInfo)
 		if err != nil {
-			return n, err
+			return err
+		}
+
+		toFiles, err := getFileInfos(d.To, toInfo)
+		if err != nil {
+			return err
+		}
+
+		pairs = makePairs(fromFiles, toFiles)
+	}
+
+	for _, pair := range pairs {
+		err = d.print(p, w, pair)
+		if err != nil {
+			return err
 		}
 	}
 
-	return n, nil
+	return nil
+}
+
+func (d *PathDiffer) print(p Printer, w io.Writer, pair pair) error {
+	var A, B []byte
+	var err error
+
+	s := Subject{}
+
+	if pair.A != nil {
+		A, err = ioutil.ReadFile(pair.A.AbsPath)
+		if err != nil {
+			return err
+		}
+
+		s.A = string(A)
+		s.FromFile = pair.A.Base
+	}
+
+	if pair.B != nil {
+		B, err = ioutil.ReadFile(pair.B.AbsPath)
+		if err != nil {
+			return err
+		}
+
+		s.B = string(B)
+		s.ToFile = pair.B.Base
+	}
+
+	return p.Print(s, w)
 }
 
 type fileInfo struct {
@@ -156,54 +176,7 @@ type pair struct {
 	A, B *fileInfo
 }
 
-func (p pair) WriteTo(w io.Writer) (int64, error) {
-	out, err := p.diff()
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := w.Write([]byte(out))
-
-	return int64(n), err
-}
-
-func (p pair) diff() (string, error) {
-	var A, B []byte
-	var err error
-
-	fromFile, toFile := "<created>", "<deleted>"
-
-	if p.A != nil {
-		A, err = ioutil.ReadFile(p.A.AbsPath)
-		if err != nil {
-			return "", err
-		}
-
-		fromFile = p.A.Base
-	}
-
-	if p.B != nil {
-		B, err = ioutil.ReadFile(p.B.AbsPath)
-		if err != nil {
-			return "", err
-		}
-
-		toFile = p.B.Base
-	}
-
-	unifiedDiff := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(string(A)),
-		B:        difflib.SplitLines(string(B)),
-		FromFile: fromFile,
-		ToFile:   toFile,
-		Context:  10,
-		Color:    true,
-	}
-
-	return difflib.GetUnifiedDiffString(unifiedDiff)
-}
-
-func pairs(from, to fileInfos) []pair {
+func makePairs(from, to fileInfos) []pair {
 	pairs := make([]pair, 0)
 
 	for _, infoA := range from {

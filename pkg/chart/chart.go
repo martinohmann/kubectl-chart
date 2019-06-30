@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	"github.com/imdario/mergo"
@@ -15,9 +16,12 @@ import (
 )
 
 const (
-	LabelName = "kubectl-chart.io/name"
+	// LabelName is used to attach a label to each resource in a rendered chart
+	// to be able to keep track of them once they are deployed into a cluster.
+	LabelName = "kubectl-chart/name"
 )
 
+// Config is the configuration for rendering a chart.
 type Config struct {
 	Dir       string
 	Name      string
@@ -25,6 +29,8 @@ type Config struct {
 	Values    map[string]interface{}
 }
 
+// Render takes a chart config and renders the chart. It returns a map of
+// template filepaths and their rendered contents.
 func Render(config *Config) (map[string]string, error) {
 	c, err := chartutil.Load(config.Dir)
 	if err != nil {
@@ -52,6 +58,10 @@ func Render(config *Config) (map[string]string, error) {
 	return renderutil.Render(c, chartConfig, renderOptions)
 }
 
+// LoadValues loads yaml files and stores the contents of provided files into a
+// map. The contents are merged left to right, and will overwrite keys present
+// in files that are loaded earlier. This makes it possible to layer values
+// files.
 func LoadValues(files ...string) (map[string]interface{}, error) {
 	values := make(map[string]interface{})
 
@@ -68,7 +78,7 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 			return nil, err
 		}
 
-		err = mergo.Merge(&values, v)
+		err = mergo.Merge(&values, v, mergo.WithOverride)
 		if err != nil {
 			return nil, err
 		}
@@ -76,6 +86,8 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 	return nil, nil
 }
 
+// AddChartLabel adds a label with the chart name to each obj. See doc of const
+// LabelName for more information.
 func AddChartLabel(name string, objs ...runtime.Object) error {
 	for _, obj := range objs {
 		u, ok := obj.(*unstructured.Unstructured)
@@ -90,4 +102,11 @@ func AddChartLabel(name string, objs ...runtime.Object) error {
 	}
 
 	return nil
+}
+
+// LabelSelector builds valid label selector for a *resource.Builder that
+// selects all resources associated to chartName. See doc of const LabelName
+// for more information.
+func LabelSelector(chartName string) string {
+	return fmt.Sprintf("%s=%s", LabelName, chartName)
 }

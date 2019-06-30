@@ -70,7 +70,9 @@ func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	return nil
+	o.ChartDir, err = filepath.Abs(o.ChartDir)
+
+	return err
 }
 
 func (o *RenderOptions) Run() error {

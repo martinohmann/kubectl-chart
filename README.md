@@ -1,6 +1,7 @@
 kubectl-chart
 =============
 
+[![Build Status](https://travis-ci.org/martinohmann/kubectl-chart.svg?branch=master)](https://travis-ci.org/martinohmann/kubectl-chart)
 [![Go Report Card](https://goreportcard.com/badge/github.com/martinohmann/kubectl-chart?style=flat)](https://goreportcard.com/report/github.com/martinohmann/kubectl-chart)
 [![GoDoc](https://godoc.org/github.com/martinohmann/kubectl-chart?status.svg)](https://godoc.org/github.com/martinohmann/kubectl-chart)
 
@@ -17,15 +18,33 @@ messy in this early stage and subject for cleanup.
 Why?
 ----
 
+The goal that `kubectl-chart` is trying to achieve is to ease the management of
+core cluster components like monitoring, operators, CNI, CI/CD tooling and the
+like. All common operations should only require a single command (e.g. render,
+diff and dry-run apply in one step). Lastly it should integrate some features
+not (yet) present in kubernetes (e.g. optional PVC deletion for stateful sets,
+lifecycle hooks and dry-run for deletions).
+
+It is built as a single binary and is completely stateless. It is also well
+suited for integration into CI/CD because it provides dry-run and diff
+functionality for chart changes.
+
+Features
+--------
+
 - Render and apply multiple charts in one step
-- Need for proper pruneing of resources removed from a chart (leveraging prune
+- Proper pruneing of resources removed from a chart (leveraging prune
   functionality of the `kubectl apply` command)
 - Prettier resource diffs for charts (leveraging functionality of `kubectl
   diff`, enhanced by custom diff printer)
 - Dry-run for chart deletions
+- Diffs for deleted chart resources
+- Resource diffs for all charts while dry-run and apply
+
+Planned features
+----------------
+
 - Simple chart lifecycle hooks (like helm, WIP)
-- Diffs for deleted chart resources (not supported by `kubectl diff` yet, TODO)
-- Resource diffs for all charts while dry-run and apply (TODO)
 - Configurable pruning of PVC of deleted StatefulSets (TODO)
 - Listing all deployed resources of a chart (similar to `kubectl get all` with filter, TODO)
 

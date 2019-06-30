@@ -2,8 +2,9 @@ apiVersion: apps/v1
 kind: Pod
 metadata:
   name: {{ include "testchart.fullname" . }}
+  namespace: bar
   annotations:
-    kubectl-chart.io/hook: {{ .Values.hookType }}
+    kubectl-chart/hook: {{ .Values.hookType }}
   labels:
     app.kubernetes.io/name: {{ include "testchart.name" . }}
     helm.sh/chart: {{ include "testchart.chart" . }}

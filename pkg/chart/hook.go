@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	AnnotationHook = "kubectl-chart.io/hook"
+	AnnotationHook = "kubectl-chart/hook"
 
 	PreApplyHook   = "pre-apply"
 	PostApplyHook  = "post-apply"

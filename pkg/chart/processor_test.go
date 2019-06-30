@@ -29,7 +29,8 @@ func TestProcessor_Process(t *testing.T) {
 				"apiVersion": "v1",
 				"kind":       "Service",
 				"metadata": map[string]interface{}{
-					"name": "foobar-testchart",
+					"name":      "foobar-testchart",
+					"namespace": "foo",
 					"labels": map[string]interface{}{
 						"app.kubernetes.io/name":       "testchart",
 						"helm.sh/chart":                "testchart-0.1.0",
@@ -63,7 +64,8 @@ func TestProcessor_Process(t *testing.T) {
 				"apiVersion": "apps/v1",
 				"kind":       "Pod",
 				"metadata": map[string]interface{}{
-					"name": "foobar-testchart",
+					"name":      "foobar-testchart",
+					"namespace": "bar",
 					"annotations": map[string]interface{}{
 						AnnotationHook: PostApplyHook,
 					},
