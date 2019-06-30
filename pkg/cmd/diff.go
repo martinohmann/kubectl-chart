@@ -6,6 +6,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/diff"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,9 +42,9 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 
 type DiffOptions struct {
 	genericclioptions.IOStreams
-	*RenderOptions
 
-	DiffFlags *DiffFlags
+	ChartFlags *ChartFlags
+	DiffFlags  *DiffFlags
 
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
@@ -51,25 +52,24 @@ type DiffOptions struct {
 	DryRunVerifier  *apply.DryRunVerifier
 	BuilderFactory  func() *resource.Builder
 	DiffPrinter     diff.Printer
+	Serializer      chart.Serializer
+	Visitor         *chart.Visitor
 
+	Namespace        string
 	EnforceNamespace bool
 }
 
 func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 	return &DiffOptions{
-		IOStreams:     streams,
-		RenderOptions: NewRenderOptions(streams),
-		DiffFlags:     NewDefaultDiffFlags(),
+		IOStreams:  streams,
+		ChartFlags: NewDefaultChartFlags(),
+		DiffFlags:  NewDefaultDiffFlags(),
+		Serializer: yaml.NewSerializer(),
 	}
 }
 
 func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
-
-	err = o.RenderOptions.Complete(f)
-	if err != nil {
-		return err
-	}
 
 	o.DiffPrinter = o.DiffFlags.ToPrinter()
 
@@ -106,11 +106,13 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	return nil
+	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
+
+	return err
 }
 
 func (o *DiffOptions) Run() error {
-	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
+	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -50,12 +51,12 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 
 type ApplyOptions struct {
 	genericclioptions.IOStreams
-	*RenderOptions
 
 	DryRun       bool
 	ServerDryRun bool
 	Recorder     recorders.OperationRecorder
 	ShowDiff     bool
+	ChartFlags   *ChartFlags
 	DiffFlags    *DiffFlags
 	DiffOptions  *DiffOptions
 
@@ -64,16 +65,20 @@ type ApplyOptions struct {
 	OpenAPISchema   openapi.Resources
 	Mapper          meta.RESTMapper
 	BuilderFactory  func() *resource.Builder
+	Serializer      chart.Serializer
+	Visitor         *chart.Visitor
 
+	Namespace        string
 	EnforceNamespace bool
 }
 
 func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 	return &ApplyOptions{
-		IOStreams:     streams,
-		RenderOptions: NewRenderOptions(streams),
-		DiffFlags:     NewDefaultDiffFlags(),
-		Recorder:      recorders.NewOperationRecorder(),
+		IOStreams:  streams,
+		ChartFlags: NewDefaultChartFlags(),
+		DiffFlags:  NewDefaultDiffFlags(),
+		Recorder:   recorders.NewOperationRecorder(),
+		Serializer: yaml.NewSerializer(),
 	}
 }
 
@@ -87,11 +92,6 @@ func (o *ApplyOptions) Validate() error {
 
 func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
-
-	err = o.RenderOptions.Complete(f)
-	if err != nil {
-		return err
-	}
 
 	o.BuilderFactory = func() *resource.Builder {
 		return resource.NewBuilder(f)
@@ -127,30 +127,37 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
+	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
+	if err != nil {
+		return err
+	}
+
 	if !o.ShowDiff {
 		return nil
 	}
 
 	o.DiffOptions = &DiffOptions{
-		RenderOptions:    o.RenderOptions,
 		IOStreams:        o.IOStreams,
 		DynamicClient:    o.DynamicClient,
 		DiscoveryClient:  o.DiscoveryClient,
 		OpenAPISchema:    o.OpenAPISchema,
 		BuilderFactory:   o.BuilderFactory,
+		Namespace:        o.Namespace,
 		EnforceNamespace: o.EnforceNamespace,
 		DiffPrinter:      o.DiffFlags.ToPrinter(),
 		DryRunVerifier: &apply.DryRunVerifier{
 			Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
 			OpenAPIGetter: o.DiscoveryClient,
 		},
+		Serializer: o.Serializer,
+		Visitor:    o.Visitor,
 	}
 
 	return nil
 }
 
 func (o *ApplyOptions) Run() error {
-	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
