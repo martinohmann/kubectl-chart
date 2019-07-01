@@ -32,14 +32,15 @@ func (f *ChartFlags) ToVisitor(namespace string) (*chart.Visitor, error) {
 		return nil, err
 	}
 
-	return &chart.Visitor{
-		Processor:   chart.NewDefaultProcessor(),
+	options := chart.VisitorOptions{
 		ChartDir:    chartDir,
 		ChartFilter: f.ChartFilter,
 		Recursive:   f.Recursive,
 		ValueFiles:  f.ValueFiles,
 		Namespace:   namespace,
-	}, nil
+	}
+
+	return chart.NewVisitor(chart.NewDefaultProcessor(), options), nil
 }
 
 type DiffFlags struct {
@@ -59,7 +60,7 @@ func (f *DiffFlags) AddFlags(cmd *cobra.Command) {
 }
 
 func (f *DiffFlags) ToPrinter() diff.Printer {
-	return diff.NewPrinter(diff.Options{
+	return diff.NewUnifiedPrinter(diff.Options{
 		Color:   !f.NoColor,
 		Context: f.Context,
 	})

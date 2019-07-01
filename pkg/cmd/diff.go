@@ -154,7 +154,7 @@ func (o *DiffOptions) diffRenderedResources(config *chart.Config, objs []runtime
 	r := o.BuilderFactory().
 		Unstructured().
 		NamespaceParam(o.Namespace).DefaultNamespace().
-		Stream(bytes.NewBuffer(buf), "stream").
+		Stream(bytes.NewBuffer(buf), config.Name).
 		Flatten().
 		Do()
 	if err := r.Err(); err != nil {

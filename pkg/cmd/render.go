@@ -36,7 +36,6 @@ type RenderOptions struct {
 	ChartFlags *ChartFlags
 
 	HookType string
-	// Namespace string
 
 	Serializer chart.Serializer
 	Visitor    *chart.Visitor
@@ -90,10 +89,6 @@ func (o *RenderOptions) Run() error {
 		return nil
 	})
 }
-
-// func (o *RenderOptions) Visit(fn func(config *chart.Config, resources, hooks []runtime.Object, err error) error) error {
-// 	return o.Visitor.Visit(fn)
-// }
 
 func (o *RenderOptions) selectResources(resources, hooks []runtime.Object) ([]runtime.Object, error) {
 	if o.HookType == "" {
