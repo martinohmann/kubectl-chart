@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/apply"
@@ -46,17 +45,14 @@ type DiffOptions struct {
 	ChartFlags *ChartFlags
 	DiffFlags  *DiffFlags
 
-	DynamicClient   dynamic.Interface
-	DiscoveryClient discovery.CachedDiscoveryInterface
-	OpenAPISchema   openapi.Resources
-	DryRunVerifier  *apply.DryRunVerifier
-	BuilderFactory  func() *resource.Builder
-	DiffPrinter     diff.Printer
-	Serializer      chart.Serializer
-	Visitor         *chart.Visitor
+	OpenAPISchema  openapi.Resources
+	DryRunVerifier *apply.DryRunVerifier
+	BuilderFactory func() *resource.Builder
+	DiffPrinter    diff.Printer
+	Serializer     chart.Serializer
+	Visitor        *chart.Visitor
 
-	Namespace        string
-	EnforceNamespace bool
+	Namespace string
 }
 
 func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
@@ -77,7 +73,7 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return resource.NewBuilder(f)
 	}
 
-	o.DiscoveryClient, err = f.ToDiscoveryClient()
+	discoveryClient, err := f.ToDiscoveryClient()
 	if err != nil {
 		return err
 	}
@@ -86,22 +82,22 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	if err != nil {
 	}
 
-	o.DynamicClient, err = dynamic.NewForConfig(config)
+	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return err
 	}
 
 	o.DryRunVerifier = &apply.DryRunVerifier{
-		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
-		OpenAPIGetter: o.DiscoveryClient,
+		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(dynamicClient)),
+		OpenAPIGetter: discoveryClient,
 	}
 
-	o.OpenAPISchema, err = openapi.NewOpenAPIGetter(o.DiscoveryClient).Get()
+	o.OpenAPISchema, err = openapi.NewOpenAPIGetter(discoveryClient).Get()
 	if err != nil {
 		return err
 	}
 
-	o.Namespace, o.EnforceNamespace, err = f.ToRawKubeConfigLoader().Namespace()
+	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
 		return err
 	}

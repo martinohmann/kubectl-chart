@@ -61,8 +61,8 @@ func TestProcessor_Process(t *testing.T) {
 	expectedHooks := []runtime.Object{
 		&unstructured.Unstructured{
 			Object: map[string]interface{}{
-				"apiVersion": "apps/v1",
-				"kind":       "Pod",
+				"apiVersion": "batch/v1",
+				"kind":       "Job",
 				"metadata": map[string]interface{}{
 					"name":      "foobar-chart1",
 					"namespace": "bar",
@@ -78,16 +78,21 @@ func TestProcessor_Process(t *testing.T) {
 					},
 				},
 				"spec": map[string]interface{}{
-					"containers": []interface{}{
-						map[string]interface{}{
-							"name":            "chart1",
-							"image":           "nginx:stable",
-							"imagePullPolicy": "IfNotPresent",
-							"ports": []interface{}{
+					"template": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"restartPolicy": "Never",
+							"containers": []interface{}{
 								map[string]interface{}{
-									"containerPort": int64(80),
-									"protocol":      "TCP",
-									"name":          "http",
+									"name":            "chart1",
+									"image":           "nginx:stable",
+									"imagePullPolicy": "IfNotPresent",
+									"ports": []interface{}{
+										map[string]interface{}{
+											"containerPort": int64(80),
+											"protocol":      "TCP",
+											"name":          "http",
+										},
+									},
 								},
 							},
 						},

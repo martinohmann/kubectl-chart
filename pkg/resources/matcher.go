@@ -5,6 +5,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+func IsOfKind(obj runtime.Object, kind string) bool {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	return gvk.Kind == kind
+}
+
 // FindMatching walks haystack and returns the first object matching needle if
 // there is one. The second return value indicates whether the object was found
 // or not.

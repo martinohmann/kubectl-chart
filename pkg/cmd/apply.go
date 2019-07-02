@@ -9,10 +9,12 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	kprinters "k8s.io/cli-runtime/pkg/printers"
@@ -137,14 +139,11 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	o.DiffOptions = &DiffOptions{
-		IOStreams:        o.IOStreams,
-		DynamicClient:    o.DynamicClient,
-		DiscoveryClient:  o.DiscoveryClient,
-		OpenAPISchema:    o.OpenAPISchema,
-		BuilderFactory:   o.BuilderFactory,
-		Namespace:        o.Namespace,
-		EnforceNamespace: o.EnforceNamespace,
-		DiffPrinter:      o.DiffFlags.ToPrinter(),
+		IOStreams:      o.IOStreams,
+		OpenAPISchema:  o.OpenAPISchema,
+		BuilderFactory: o.BuilderFactory,
+		Namespace:      o.Namespace,
+		DiffPrinter:    o.DiffFlags.ToPrinter(),
 		DryRunVerifier: &apply.DryRunVerifier{
 			Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
 			OpenAPIGetter: o.DiscoveryClient,
@@ -157,7 +156,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 }
 
 func (o *ApplyOptions) Run() error {
-	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	err := o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
@@ -194,6 +193,44 @@ func (o *ApplyOptions) Run() error {
 		applier := o.createApplier(config.Name, f.Name())
 
 		return applier.Run()
+	})
+	if err != nil {
+		return err
+	}
+
+	return o.Recorder.Objects("pruned").Visit(func(obj runtime.Object, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !resources.IsOfKind(obj, resources.KindStatefulSet) {
+			return nil
+		}
+
+		policy, err := resources.GetDeletionPolicy(obj)
+		if err != nil || policy != resources.DeletionPolicyDeletePVCs {
+			return err
+		}
+
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return errors.Errorf("illegal object type: %T", obj)
+		}
+
+		resourceDeleter := &ResourceDeleter{
+			IOStreams:       o.IOStreams,
+			DynamicClient:   o.DynamicClient,
+			DryRun:          o.DryRun || o.ServerDryRun,
+			WaitForDeletion: true,
+			Builder: o.BuilderFactory().
+				Unstructured().
+				ContinueOnError().
+				NamespaceParam(u.GetNamespace()).DefaultNamespace().
+				ResourceTypeOrNameArgs(true, resources.KindPersistentVolumeClaim).
+				LabelSelector(resources.PersistentVolumeClaimSelector(u.GetName())),
+		}
+
+		return resourceDeleter.Delete()
 	})
 }
 

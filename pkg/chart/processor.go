@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -36,7 +37,7 @@ func (p *Processor) Process(config *Config) ([]runtime.Object, []runtime.Object,
 		return nil, nil, err
 	}
 
-	resources, hooks, err := p.parseTemplates(templates)
+	resources, hookResources, err := p.parseTemplates(templates)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -46,12 +47,29 @@ func (p *Processor) Process(config *Config) ([]runtime.Object, []runtime.Object,
 		return nil, nil, err
 	}
 
-	err = postProcessObjects(config, hooks...)
+	err = postProcessObjects(config, hookResources...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return resources, hooks, nil
+	hooks := make(map[string][]*Hook)
+
+	for _, obj := range hookResources {
+		hook, err := ParseHook(obj)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to parse hook in chart %q", config.Name)
+		}
+
+		if hooks[hook.Type] == nil {
+			hooks[hook.Type] = make([]*Hook, 0, 1)
+		}
+
+		hooks[hook.Type] = append(hooks[hook.Type], hook)
+	}
+
+	//@TODO(mohmann): use hooks
+
+	return resources, hookResources, nil
 }
 
 func (p *Processor) parseTemplates(templates map[string]string) ([]runtime.Object, []runtime.Object, error) {
@@ -89,5 +107,5 @@ func postProcessObjects(config *Config, objs ...runtime.Object) error {
 		return err
 	}
 
-	return nil
+	return resources.LabelStatefulSets(objs)
 }

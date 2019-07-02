@@ -3,20 +3,23 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"strings"
+	"time"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	kprinters "k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/delete"
+	"k8s.io/klog"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
 )
 
 func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
@@ -34,6 +37,7 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	o.ChartFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
+	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, all resources matching the chart selector will be pruned, even those previously removed from the chart.")
 
 	return cmd
 }
@@ -42,10 +46,10 @@ type DeleteOptions struct {
 	genericclioptions.IOStreams
 
 	DryRun     bool
+	Prune      bool
 	ChartFlags *ChartFlags
 
 	DynamicClient  dynamic.Interface
-	Mapper         meta.RESTMapper
 	BuilderFactory func() *resource.Builder
 	Serializer     chart.Serializer
 	Visitor        *chart.Visitor
@@ -83,42 +87,9 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Mapper, err = f.ToRESTMapper()
-	if err != nil {
-		return err
-	}
-
 	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
 
 	return err
-}
-
-func (o *DeleteOptions) createDeleter(chartName string, stream io.Reader) (*delete.DeleteOptions, error) {
-	d := &delete.DeleteOptions{
-		IOStreams:       o.IOStreams,
-		IgnoreNotFound:  true,
-		Cascade:         true,
-		WaitForDeletion: true,
-		GracePeriod:     -1,
-		Mapper:          o.Mapper,
-		DynamicClient:   o.DynamicClient,
-	}
-
-	r := o.BuilderFactory().
-		Unstructured().
-		ContinueOnError().
-		NamespaceParam(o.Namespace).DefaultNamespace().
-		Stream(stream, chartName).
-		RequireObject(false).
-		Do()
-
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-
-	d.Result = r
-
-	return d, nil
 }
 
 func (o *DeleteOptions) Run() error {
@@ -127,40 +98,169 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		buf, err := o.Serializer.Encode(resources)
-		if err != nil {
-			return err
-		}
+		builder := o.BuilderFactory().
+			Unstructured().
+			ContinueOnError().
+			RequireObject(false)
 
-		deleter, err := o.createDeleter(config.Name, bytes.NewBuffer(buf))
-		if err != nil {
-			return err
-		}
-
-		if !o.DryRun {
-			return deleter.RunDelete()
-		}
-
-		return deleter.Result.Visit(func(info *resource.Info, err error) error {
+		if o.Prune {
+			builder = builder.AllNamespaces(true).
+				ResourceTypeOrNameArgs(true, "all").
+				LabelSelector(chart.LabelSelector(config.Name))
+		} else {
+			buf, err := o.Serializer.Encode(resources)
 			if err != nil {
 				return err
 			}
 
-			err = info.Get()
-			if errors.IsNotFound(err) {
-				return nil
-			} else if err != nil {
-				return err
-			}
+			builder = builder.
+				NamespaceParam(o.Namespace).DefaultNamespace().
+				Stream(bytes.NewBuffer(buf), config.Name)
+		}
 
-			o.PrintObj(info)
+		resourceDeleter := &ResourceDeleter{
+			IOStreams:       o.IOStreams,
+			DynamicClient:   o.DynamicClient,
+			DryRun:          o.DryRun,
+			WaitForDeletion: true,
+			Builder:         builder,
+		}
 
-			return nil
-		})
+		return resourceDeleter.Delete()
 	})
 }
 
-func (o *DeleteOptions) PrintObj(info *resource.Info) {
+// ResourceDeleter carries out resource deletions based on the result returned
+// by the builder.
+type ResourceDeleter struct {
+	genericclioptions.IOStreams
+	Builder         *resource.Builder
+	DynamicClient   dynamic.Interface
+	DryRun          bool
+	WaitForDeletion bool
+}
+
+// Delete deletes all resources matching the infos in the result returned by
+// the builder. If the DryRun is set to true, deletion operations will be only
+// printed without actually performing them. If the WaitForDeletion field is
+// set to true, the deleter will wait until the resources are deleted from the
+// cluster.
+func (d *ResourceDeleter) Delete() error {
+	result := d.Builder.Flatten().Do()
+	if err := result.Err(); err != nil {
+		return err
+	}
+
+	result = result.IgnoreErrors(errors.IsNotFound)
+
+	found := 0
+
+	deletedInfos := []*resource.Info{}
+	uidMap := cmdwait.UIDMap{}
+
+	err := result.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			return err
+		}
+
+		deletedInfos = append(deletedInfos, info)
+		found++
+
+		if d.DryRun {
+			if err = info.Get(); err != nil {
+				return err
+			}
+
+			d.PrintObj(info)
+
+			return nil
+		}
+
+		policy := metav1.DeletePropagationBackground
+
+		response, err := d.deleteResource(info, &metav1.DeleteOptions{
+			PropagationPolicy: &policy,
+		})
+		if err != nil {
+			return err
+		}
+
+		resourceLocation := cmdwait.ResourceLocation{
+			GroupResource: info.Mapping.Resource.GroupResource(),
+			Namespace:     info.Namespace,
+			Name:          info.Name,
+		}
+
+		if status, ok := response.(*metav1.Status); ok && status.Details != nil {
+			uidMap[resourceLocation] = status.Details.UID
+			return nil
+		}
+
+		responseMetadata, err := meta.Accessor(response)
+		if err != nil {
+			// we don't have UID, but we didn't fail the delete, next best
+			// thing is just skipping the UID
+			klog.V(1).Info(err)
+			return nil
+		}
+
+		uidMap[resourceLocation] = responseMetadata.GetUID()
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if found == 0 {
+		fmt.Fprintf(d.Out, "No resources found\n")
+		return nil
+	}
+
+	if !d.WaitForDeletion || d.DryRun {
+		return nil
+	}
+
+	// we requested to wait forever, set it to a week.
+	effectiveTimeout := 168 * time.Hour
+
+	waitOptions := cmdwait.WaitOptions{
+		IOStreams:      d.IOStreams,
+		ResourceFinder: genericclioptions.ResourceFinderForResult(resource.InfoListVisitor(deletedInfos)),
+		UIDMap:         uidMap,
+		DynamicClient:  d.DynamicClient,
+		Timeout:        effectiveTimeout,
+		Printer:        kprinters.NewDiscardingPrinter(),
+		ConditionFn:    cmdwait.IsDeleted,
+	}
+
+	err = waitOptions.RunWait()
+	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
+		// if we're forbidden from waiting, we shouldn't fail.
+		// if the resource doesn't support a verb we need, we shouldn't fail.
+		klog.V(1).Info(err)
+		return nil
+	}
+
+	return err
+}
+
+func (d *ResourceDeleter) deleteResource(info *resource.Info, deleteOptions *metav1.DeleteOptions) (runtime.Object, error) {
+	response, err := resource.NewHelper(info.Client, info.Mapping).
+		DeleteWithOptions(info.Namespace, info.Name, deleteOptions)
+
+	if err != nil {
+		return nil, cmdutil.AddSourceToErr("deleting", info.Source, err)
+	}
+
+	d.PrintObj(info)
+
+	return response, nil
+}
+
+// PrintObj prints out the object that was deleted (or would be deleted if dry
+// run is enabled).
+func (d *ResourceDeleter) PrintObj(info *resource.Info) {
 	operation := "deleted"
 	groupKind := info.Mapping.GroupVersionKind
 	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
@@ -168,9 +268,9 @@ func (o *DeleteOptions) PrintObj(info *resource.Info) {
 		kindString = strings.ToLower(groupKind.Kind)
 	}
 
-	if o.DryRun {
+	if d.DryRun {
 		operation = fmt.Sprintf("%s (dry run)", operation)
 	}
 
-	fmt.Fprintf(o.Out, "%s \"%s\" %s\n", kindString, info.Name, operation)
+	fmt.Fprintf(d.Out, "%s/%s %s\n", kindString, info.Name, operation)
 }
