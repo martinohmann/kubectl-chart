@@ -5,21 +5,31 @@ import (
 	"io/ioutil"
 
 	"github.com/imdario/mergo"
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/proto/hapi/chart"
 	"k8s.io/helm/pkg/renderutil"
 	"k8s.io/helm/pkg/timeconv"
 )
 
-const (
-	// LabelName is used to attach a label to each resource in a rendered chart
-	// to be able to keep track of them once they are deployed into a cluster.
-	LabelName = "kubectl-chart/name"
-)
+// Chart is a rendered chart with the config used for rendering, a list of
+// chart resources and a map of chart hooks.
+type Chart struct {
+	Config    *Config
+	Resources ResourceList
+	Hooks     HookMap
+}
+
+// LabelSelector builds valid label selector for a *resource.Builder that
+// selects all resources associated to the chart. See doc of const LabelChartName
+// for more information.
+func (c *Chart) LabelSelector() string {
+	return fmt.Sprintf("%s=%s", LabelChartName, c.Config.Name)
+}
+
+func (c *Chart) HookLabelSelector(hookType string) string {
+	return fmt.Sprintf("%s=%s,%s=%s", LabelHookChartName, c.Config.Name, LabelHookType, hookType)
+}
 
 // Config is the configuration for rendering a chart.
 type Config struct {
@@ -84,29 +94,4 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 		}
 	}
 	return nil, nil
-}
-
-// AddChartLabel adds a label with the chart name to each obj. See doc of const
-// LabelName for more information.
-func AddChartLabel(name string, objs ...runtime.Object) error {
-	for _, obj := range objs {
-		u, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			return errors.Errorf("failed to add chart label %q due to illegal object type: %T", name, obj)
-		}
-
-		err := unstructured.SetNestedField(u.Object, name, "metadata", "labels", LabelName)
-		if err != nil {
-			return errors.Wrapf(err, "failed to add chart label %q", name)
-		}
-	}
-
-	return nil
-}
-
-// LabelSelector builds valid label selector for a *resource.Builder that
-// selects all resources associated to chartName. See doc of const LabelName
-// for more information.
-func LabelSelector(chartName string) string {
-	return fmt.Sprintf("%s=%s", LabelName, chartName)
 }

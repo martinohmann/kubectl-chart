@@ -1,8 +1,9 @@
-package resources
+package chart
 
 import (
 	"fmt"
 
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -10,11 +11,21 @@ import (
 )
 
 const (
-	KindStatefulSet           = "StatefulSet"
-	KindPersistentVolumeClaim = "PersistentVolumeClaim"
-	KindPod                   = "Pod"
-	KindJob                   = "Job"
+	// LabelChartName is used to attach a label to each resource in a rendered chart
+	// to be able to keep track of them once they are deployed into a cluster.
+	LabelChartName = "kubectl-chart/chart-name"
 
+	// LabelHookChartName is used to attach a label to each hook to be able to
+	// keep track of them once they are deployed into a cluster. The label is
+	// different from LabelChartName because hooks have a different lifecycle
+	// than normal resources.
+	LabelHookChartName = "kubectl-chart/hook-chart-name"
+
+	// LabelHookType is set on chart hooks to be able to clean them up by type.
+	LabelHookType = "kubectl-chart/hook-type"
+
+	// LabelOwnedByStatefulSet is set on PersistentVolumeClaims to identify
+	// them when a StatefulSet is deleted.
 	LabelOwnedByStatefulSet = "kubectl-chart/owned-by-statefulset"
 )
 
@@ -25,7 +36,7 @@ func LabelStatefulSets(objs []runtime.Object) error {
 			return errors.Errorf("illegal object type: %T", obj)
 		}
 
-		if !IsOfKind(obj, KindStatefulSet) {
+		if !resources.IsOfKind(obj, resources.KindStatefulSet) {
 			continue
 		}
 
@@ -36,9 +47,8 @@ func LabelStatefulSets(objs []runtime.Object) error {
 		}
 
 		spec := &statefulSet.Spec
-
-		addStatefulSetLabel(&statefulSet, spec.Selector.MatchLabels)
-		addStatefulSetLabel(&statefulSet, spec.Template.ObjectMeta.Labels)
+		spec.Selector.MatchLabels[LabelOwnedByStatefulSet] = statefulSet.GetName()
+		spec.Template.ObjectMeta.Labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
 
 		u.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&statefulSet)
 		if err != nil {
@@ -47,14 +57,6 @@ func LabelStatefulSets(objs []runtime.Object) error {
 	}
 
 	return nil
-}
-
-func addStatefulSetLabel(statefulSet *appsv1.StatefulSet, labels map[string]string) {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-
-	labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
 }
 
 // PersistentVolumeClaimSelector returns a selector that can be used to query

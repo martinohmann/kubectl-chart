@@ -53,6 +53,7 @@ type DeleteOptions struct {
 	BuilderFactory func() *resource.Builder
 	Serializer     chart.Serializer
 	Visitor        *chart.Visitor
+	HookExecutor   *HookExecutor
 
 	Namespace        string
 	EnforceNamespace bool
@@ -87,13 +88,18 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
+	o.HookExecutor = &HookExecutor{
+		IOStreams: o.IOStreams,
+		DryRun:    o.DryRun,
+	}
+
 	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
 
 	return err
 }
 
 func (o *DeleteOptions) Run() error {
-	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(c *chart.Chart, err error) error {
 		if err != nil {
 			return err
 		}
@@ -106,16 +112,16 @@ func (o *DeleteOptions) Run() error {
 		if o.Prune {
 			builder = builder.AllNamespaces(true).
 				ResourceTypeOrNameArgs(true, "all").
-				LabelSelector(chart.LabelSelector(config.Name))
+				LabelSelector(c.LabelSelector())
 		} else {
-			buf, err := o.Serializer.Encode(resources)
+			buf, err := o.Serializer.Encode(c.Resources.GetObjects())
 			if err != nil {
 				return err
 			}
 
 			builder = builder.
 				NamespaceParam(o.Namespace).DefaultNamespace().
-				Stream(bytes.NewBuffer(buf), config.Name)
+				Stream(bytes.NewBuffer(buf), c.Config.Name)
 		}
 
 		resourceDeleter := &ResourceDeleter{
@@ -126,7 +132,17 @@ func (o *DeleteOptions) Run() error {
 			Builder:         builder,
 		}
 
-		return resourceDeleter.Delete()
+		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
+		if err != nil {
+			return err
+		}
+
+		err = resourceDeleter.Delete()
+		if err != nil {
+			return err
+		}
+
+		return o.HookExecutor.ExecHooks(c, chart.PostDeleteHook)
 	})
 }
 
@@ -208,28 +224,20 @@ func (d *ResourceDeleter) Delete() error {
 
 		return nil
 	})
-	if err != nil {
+	if err != nil || found == 0 {
 		return err
-	}
-
-	if found == 0 {
-		fmt.Fprintf(d.Out, "No resources found\n")
-		return nil
 	}
 
 	if !d.WaitForDeletion || d.DryRun {
 		return nil
 	}
 
-	// we requested to wait forever, set it to a week.
-	effectiveTimeout := 168 * time.Hour
-
 	waitOptions := cmdwait.WaitOptions{
 		IOStreams:      d.IOStreams,
 		ResourceFinder: genericclioptions.ResourceFinderForResult(resource.InfoListVisitor(deletedInfos)),
 		UIDMap:         uidMap,
 		DynamicClient:  d.DynamicClient,
-		Timeout:        effectiveTimeout,
+		Timeout:        24 * time.Hour,
 		Printer:        kprinters.NewDiscardingPrinter(),
 		ConditionFn:    cmdwait.IsDeleted,
 	}

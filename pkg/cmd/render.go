@@ -69,15 +69,12 @@ func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
 }
 
 func (o *RenderOptions) Run() error {
-	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(c *chart.Chart, err error) error {
 		if err != nil {
 			return err
 		}
 
-		objs, err := o.selectResources(resources, hooks)
-		if err != nil {
-			return err
-		}
+		objs := o.selectResources(c)
 
 		buf, err := o.Serializer.Encode(objs)
 		if err != nil {
@@ -90,14 +87,14 @@ func (o *RenderOptions) Run() error {
 	})
 }
 
-func (o *RenderOptions) selectResources(resources, hooks []runtime.Object) ([]runtime.Object, error) {
+func (o *RenderOptions) selectResources(c *chart.Chart) []runtime.Object {
 	if o.HookType == "" {
-		return resources, nil
+		return c.Resources.GetObjects()
 	}
 
 	if o.HookType == "all" {
-		return hooks, nil
+		return c.Hooks.GetObjects()
 	}
 
-	return chart.FilterHooks(o.HookType, hooks...)
+	return c.Hooks.Type(o.HookType).GetObjects()
 }

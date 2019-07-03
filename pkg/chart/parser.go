@@ -38,7 +38,7 @@ func (p *Parser) sort(objs []runtime.Object) ([]runtime.Object, []runtime.Object
 	hooks := make([]runtime.Object, 0)
 
 	for _, obj := range objs {
-		ok, err := IsHook(obj)
+		ok, err := HasHookAnnotation(obj)
 		if err != nil {
 			return nil, nil, err
 		}

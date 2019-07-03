@@ -1,4 +1,4 @@
-package resources
+package chart
 
 import (
 	"testing"
@@ -6,12 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"k8s.io/apimachinery/pkg/api/meta"
 )
 
-func TestEnsureNamespaceSet(t *testing.T) {
-	obj := &unstructured.Unstructured{
+func TestResource_DefaultNamespace(t *testing.T) {
+	r := NewResource(&unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
 			"kind":       "SomeKind",
@@ -19,23 +17,23 @@ func TestEnsureNamespaceSet(t *testing.T) {
 				"name": "bar",
 			},
 		},
-	}
+	})
 
-	err := EnsureNamespaceSet("", obj)
+	err := r.DefaultNamespace("")
 
 	require.Error(t, err)
 
-	err = EnsureNamespaceSet("bar", obj)
+	err = r.DefaultNamespace("bar")
 
 	require.NoError(t, err)
 
-	accessor, _ := meta.Accessor(obj)
+	r.GetNamespace()
 
-	assert.Equal(t, "bar", accessor.GetNamespace())
+	assert.Equal(t, "bar", r.GetNamespace())
 
-	err = EnsureNamespaceSet("default", obj)
+	err = r.DefaultNamespace("default")
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "bar", accessor.GetNamespace())
+	assert.Equal(t, "bar", r.GetNamespace())
 }

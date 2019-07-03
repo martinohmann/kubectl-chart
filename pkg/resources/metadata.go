@@ -6,21 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	AnnotationDeletionPolicy = "kubectl-chart/deletion-policy"
-
-	DeletionPolicyDeletePVCs = "delete-pvcs"
-)
-
-func GetDeletionPolicy(obj runtime.Object) (string, error) {
-	value, _, err := GetAnnotation(obj, AnnotationDeletionPolicy)
-	if err != nil {
-		return "", err
-	}
-
-	return value, nil
-}
-
 func GetAnnotation(obj runtime.Object, name string) (string, bool, error) {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
