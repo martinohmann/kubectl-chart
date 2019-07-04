@@ -13,6 +13,14 @@ type Options struct {
 	Color bool
 }
 
+// Subject holds the contents and filenames to compare. FromFile and ToFile are
+// just used in the diff header to provide some context on what is being
+// diffed.
+type Subject struct {
+	A, B             string
+	FromFile, ToFile string
+}
+
 // DefaultOptions are the default options that are used if none are provided.
 var DefaultOptions = Options{Context: 10, Color: true}
 
@@ -20,4 +28,10 @@ var DefaultOptions = Options{Context: 10, Color: true}
 type Differ interface {
 	// Print uses p to print a diff to w.
 	Print(p Printer, w io.Writer) error
+}
+
+// Printer is the interface for a diff printer.
+type Printer interface {
+	// Print prints a diff for subject s to w.
+	Print(s Subject, w io.Writer) error
 }

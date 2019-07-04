@@ -11,7 +11,7 @@ import (
 
 func TestProcessor_Process(t *testing.T) {
 	config := &Config{
-		Dir:       "testdata/testchart",
+		Dir:       "testdata/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
 		Values:    map[string]interface{}{},
@@ -29,11 +29,11 @@ func TestProcessor_Process(t *testing.T) {
 				"apiVersion": "v1",
 				"kind":       "Service",
 				"metadata": map[string]interface{}{
-					"name":      "foobar-testchart",
+					"name":      "foobar-chart1",
 					"namespace": "foo",
 					"labels": map[string]interface{}{
-						"app.kubernetes.io/name":       "testchart",
-						"helm.sh/chart":                "testchart-0.1.0",
+						"app.kubernetes.io/name":       "chart1",
+						"helm.sh/chart":                "chart1-0.1.0",
 						"app.kubernetes.io/instance":   "foobar",
 						"app.kubernetes.io/managed-by": "Tiller",
 						LabelName:                      "foobar",
@@ -50,7 +50,7 @@ func TestProcessor_Process(t *testing.T) {
 						},
 					},
 					"selector": map[string]interface{}{
-						"app.kubernetes.io/name":     "testchart",
+						"app.kubernetes.io/name":     "chart1",
 						"app.kubernetes.io/instance": "foobar",
 					},
 				},
@@ -64,14 +64,14 @@ func TestProcessor_Process(t *testing.T) {
 				"apiVersion": "apps/v1",
 				"kind":       "Pod",
 				"metadata": map[string]interface{}{
-					"name":      "foobar-testchart",
+					"name":      "foobar-chart1",
 					"namespace": "bar",
 					"annotations": map[string]interface{}{
 						AnnotationHook: PostApplyHook,
 					},
 					"labels": map[string]interface{}{
-						"app.kubernetes.io/name":       "testchart",
-						"helm.sh/chart":                "testchart-0.1.0",
+						"app.kubernetes.io/name":       "chart1",
+						"helm.sh/chart":                "chart1-0.1.0",
 						"app.kubernetes.io/instance":   "foobar",
 						"app.kubernetes.io/managed-by": "Tiller",
 						LabelName:                      "foobar",
@@ -80,7 +80,7 @@ func TestProcessor_Process(t *testing.T) {
 				"spec": map[string]interface{}{
 					"containers": []interface{}{
 						map[string]interface{}{
-							"name":            "testchart",
+							"name":            "chart1",
 							"image":           "nginx:stable",
 							"imagePullPolicy": "IfNotPresent",
 							"ports": []interface{}{
@@ -103,7 +103,7 @@ func TestProcessor_Process(t *testing.T) {
 
 func TestProcessor_ProcessInvalidHook(t *testing.T) {
 	config := &Config{
-		Dir:       "testdata/testchart",
+		Dir:       "testdata/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
 		Values: map[string]interface{}{

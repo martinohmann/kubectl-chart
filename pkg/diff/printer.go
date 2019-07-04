@@ -11,28 +11,20 @@ const (
 	subjectRemoved = "<removed>"
 )
 
-// Printer is a diff printer.
-type Printer struct {
+// UnifiedPrinter printes unified diffs.
+type UnifiedPrinter struct {
 	Options Options
 }
 
-// NewPrinter creates a new diff printer with diff options.
-func NewPrinter(o Options) Printer {
-	return Printer{
+// NewPrinter creates a new unified diff printer with diff options.
+func NewUnifiedPrinter(o Options) UnifiedPrinter {
+	return UnifiedPrinter{
 		Options: o,
 	}
 }
 
-// Subject holds the contents and filenames to compare. FromFile and ToFile are
-// just used in the diff header to provide some context on what is being
-// diffed.
-type Subject struct {
-	A, B             string
-	FromFile, ToFile string
-}
-
-// Print takes a Subject s and prints a diff of it to an io.Writer.
-func (p Printer) Print(s Subject, w io.Writer) error {
+// Print implements Printer.
+func (p UnifiedPrinter) Print(s Subject, w io.Writer) error {
 	if s.FromFile == "" {
 		s.FromFile = subjectCreated
 	}

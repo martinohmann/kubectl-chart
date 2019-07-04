@@ -2,12 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -36,21 +33,19 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 type RenderOptions struct {
 	genericclioptions.IOStreams
-	*ChartFlags
+	ChartFlags *ChartFlags
 
-	HookType  string
-	Namespace string
+	HookType string
 
-	chartProcessor *chart.Processor
-	Serializer     chart.Serializer
+	Serializer chart.Serializer
+	Visitor    *chart.Visitor
 }
 
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 	return &RenderOptions{
-		IOStreams:      streams,
-		ChartFlags:     &ChartFlags{},
-		chartProcessor: chart.NewDefaultProcessor(),
-		Serializer:     yaml.NewSerializer(),
+		IOStreams:  streams,
+		ChartFlags: &ChartFlags{},
+		Serializer: yaml.NewSerializer(),
 	}
 }
 
@@ -63,20 +58,18 @@ func (o *RenderOptions) Validate() error {
 }
 
 func (o *RenderOptions) Complete(f genericclioptions.RESTClientGetter) error {
-	var err error
-
-	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
+	namespace, _, err := f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
 		return err
 	}
 
-	o.ChartDir, err = filepath.Abs(o.ChartDir)
+	o.Visitor, err = o.ChartFlags.ToVisitor(namespace)
 
 	return err
 }
 
 func (o *RenderOptions) Run() error {
-	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
@@ -97,42 +90,6 @@ func (o *RenderOptions) Run() error {
 	})
 }
 
-func (o *RenderOptions) Visit(fn func(config *chart.Config, resources, hooks []runtime.Object, err error) error) error {
-	values, err := chart.LoadValues(o.ValueFiles...)
-	if err != nil {
-		return err
-	}
-
-	configs, err := o.buildChartConfigs(values)
-	if err != nil {
-		return err
-	}
-
-	for _, config := range configs {
-		if len(o.ChartFilter) > 0 && !contains(o.ChartFilter, config.Name) {
-			continue
-		}
-
-		resources, hooks, err := o.chartProcessor.Process(config)
-		if err != nil {
-			return errors.Wrapf(err, "while processing chart %q", config.Name)
-		}
-
-		if err != nil {
-			if fnErr := fn(config, resources, hooks, err); fnErr != nil {
-				return fnErr
-			}
-			continue
-		}
-
-		if err := fn(config, resources, hooks, nil); err != nil {
-			return err
-		}
-	}
-
-	return err
-}
-
 func (o *RenderOptions) selectResources(resources, hooks []runtime.Object) ([]runtime.Object, error) {
 	if o.HookType == "" {
 		return resources, nil
@@ -143,47 +100,4 @@ func (o *RenderOptions) selectResources(resources, hooks []runtime.Object) ([]ru
 	}
 
 	return chart.FilterHooks(o.HookType, hooks...)
-}
-
-func (o *RenderOptions) buildChartConfigs(values map[string]interface{}) ([]*chart.Config, error) {
-	configs := make([]*chart.Config, 0)
-
-	if o.Recursive {
-		infos, err := ioutil.ReadDir(o.ChartDir)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, info := range infos {
-			if !info.IsDir() {
-				continue
-			}
-
-			configs = append(configs, &chart.Config{
-				Dir:       filepath.Join(o.ChartDir, info.Name()),
-				Name:      info.Name(),
-				Namespace: o.Namespace,
-				Values:    values,
-			})
-		}
-	} else {
-		configs = append(configs, &chart.Config{
-			Dir:       o.ChartDir,
-			Name:      filepath.Base(o.ChartDir),
-			Namespace: o.Namespace,
-			Values:    values,
-		})
-	}
-
-	return configs, nil
-}
-
-func contains(s []string, v string) bool {
-	for _, u := range s {
-		if u == v {
-			return true
-		}
-	}
-
-	return false
 }

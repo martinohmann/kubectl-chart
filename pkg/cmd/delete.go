@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
+	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -39,31 +40,30 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 type DeleteOptions struct {
 	genericclioptions.IOStreams
-	*RenderOptions
 
-	DryRun bool
+	DryRun     bool
+	ChartFlags *ChartFlags
 
 	DynamicClient  dynamic.Interface
 	Mapper         meta.RESTMapper
 	BuilderFactory func() *resource.Builder
+	Serializer     chart.Serializer
+	Visitor        *chart.Visitor
 
+	Namespace        string
 	EnforceNamespace bool
 }
 
 func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 	return &DeleteOptions{
-		IOStreams:     streams,
-		RenderOptions: NewRenderOptions(streams),
+		IOStreams:  streams,
+		ChartFlags: NewDefaultChartFlags(),
+		Serializer: yaml.NewSerializer(),
 	}
 }
 
 func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	var err error
-
-	err = o.RenderOptions.Complete(f)
-	if err != nil {
-		return err
-	}
 
 	o.BuilderFactory = func() *resource.Builder {
 		return resource.NewBuilder(f)
@@ -88,7 +88,9 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	return nil
+	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
+
+	return err
 }
 
 func (o *DeleteOptions) createDeleter(chartName string, stream io.Reader) (*delete.DeleteOptions, error) {
@@ -120,7 +122,7 @@ func (o *DeleteOptions) createDeleter(chartName string, stream io.Reader) (*dele
 }
 
 func (o *DeleteOptions) Run() error {
-	return o.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
 		if err != nil {
 			return err
 		}
