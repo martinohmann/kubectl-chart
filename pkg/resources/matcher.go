@@ -10,7 +10,7 @@ import (
 // or not.
 func FindMatching(haystack []runtime.Object, needle runtime.Object) (runtime.Object, bool, error) {
 	for _, obj := range haystack {
-		ok, err := Matches(obj, needle)
+		ok, err := matches(obj, needle)
 		if err != nil {
 			return nil, false, err
 		}
@@ -23,9 +23,9 @@ func FindMatching(haystack []runtime.Object, needle runtime.Object) (runtime.Obj
 	return nil, false, nil
 }
 
-// Matches returns true as the first return value of a matches b. Two objects
+// matches returns true as the first return value of a matches b. Two objects
 // match if their kind, namespace and name are the same.
-func Matches(a, b runtime.Object) (bool, error) {
+func matches(a, b runtime.Object) (bool, error) {
 	typeA, err := meta.TypeAccessor(a)
 	if err != nil {
 		return false, err

@@ -3,12 +3,18 @@ package recorders
 import (
 	"sync"
 
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// Operation recorder records operations on objects.
 type OperationRecorder interface {
+	// Record records an object for given operation.
 	Record(operation string, obj runtime.Object) error
-	GetRecordedObjects() map[string][]runtime.Object
+
+	// Objects returns a resources.Visitor that visits all objects recorded for
+	// given operation.
+	Objects(operation string) resources.Visitor
 }
 
 type operationRecorder struct {
@@ -16,12 +22,14 @@ type operationRecorder struct {
 	operationMap map[string][]runtime.Object
 }
 
+// NewOperationRecorder creates a generic OperationRecorder.
 func NewOperationRecorder() OperationRecorder {
 	return &operationRecorder{
 		operationMap: make(map[string][]runtime.Object),
 	}
 }
 
+// Record implements OperationRecorder.
 func (r *operationRecorder) Record(operation string, obj runtime.Object) error {
 	r.Lock()
 	defer r.Unlock()
@@ -35,9 +43,10 @@ func (r *operationRecorder) Record(operation string, obj runtime.Object) error {
 	return nil
 }
 
-func (r *operationRecorder) GetRecordedObjects() map[string][]runtime.Object {
+// Objects implements OperationRecorder.
+func (r *operationRecorder) Objects(operation string) resources.Visitor {
 	r.Lock()
 	defer r.Unlock()
 
-	return r.operationMap
+	return resources.NewVisitor(r.operationMap[operation])
 }

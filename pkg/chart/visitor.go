@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // VisitorOptions configure the charts the visitor should visit.
@@ -19,7 +18,7 @@ type VisitorOptions struct {
 
 // VisitorFunc is the signature of a function that is called for every chart
 // that is encountered by the visitor.
-type VisitorFunc func(config *Config, resources, hooks []runtime.Object, err error) error
+type VisitorFunc func(chart *Chart, err error) error
 
 // Visitor is a chart visitor.
 type Visitor struct {
@@ -55,19 +54,19 @@ func (v *Visitor) Visit(fn VisitorFunc) error {
 			continue
 		}
 
-		resources, hooks, err := v.Processor.Process(config)
+		c, err := v.Processor.Process(config)
 		if err != nil {
 			return errors.Wrapf(err, "while processing chart %q", config.Name)
 		}
 
 		if err != nil {
-			if fnErr := fn(config, resources, hooks, err); fnErr != nil {
+			if fnErr := fn(c, err); fnErr != nil {
 				return fnErr
 			}
 			continue
 		}
 
-		if err := fn(config, resources, hooks, nil); err != nil {
+		if err := fn(c, nil); err != nil {
 			return err
 		}
 	}

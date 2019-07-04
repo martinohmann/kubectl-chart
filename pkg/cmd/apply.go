@@ -4,25 +4,33 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	kprinters "k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/apply"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/delete"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/util/openapi"
+	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
 	"k8s.io/kubernetes/pkg/kubectl/validation"
 )
 
@@ -67,6 +75,7 @@ type ApplyOptions struct {
 	BuilderFactory  func() *resource.Builder
 	Serializer      chart.Serializer
 	Visitor         *chart.Visitor
+	HookExecutor    *HookExecutor
 
 	Namespace        string
 	EnforceNamespace bool
@@ -132,19 +141,24 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
+	o.HookExecutor = &HookExecutor{
+		IOStreams:      o.IOStreams,
+		DryRun:         o.DryRun || o.ServerDryRun,
+		DynamicClient:  o.DynamicClient,
+		Mapper:         o.Mapper,
+		BuilderFactory: o.BuilderFactory,
+	}
+
 	if !o.ShowDiff {
 		return nil
 	}
 
 	o.DiffOptions = &DiffOptions{
-		IOStreams:        o.IOStreams,
-		DynamicClient:    o.DynamicClient,
-		DiscoveryClient:  o.DiscoveryClient,
-		OpenAPISchema:    o.OpenAPISchema,
-		BuilderFactory:   o.BuilderFactory,
-		Namespace:        o.Namespace,
-		EnforceNamespace: o.EnforceNamespace,
-		DiffPrinter:      o.DiffFlags.ToPrinter(),
+		IOStreams:      o.IOStreams,
+		OpenAPISchema:  o.OpenAPISchema,
+		BuilderFactory: o.BuilderFactory,
+		Namespace:      o.Namespace,
+		DiffPrinter:    o.DiffFlags.ToPrinter(),
 		DryRunVerifier: &apply.DryRunVerifier{
 			Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
 			OpenAPIGetter: o.DiscoveryClient,
@@ -157,19 +171,19 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 }
 
 func (o *ApplyOptions) Run() error {
-	return o.Visitor.Visit(func(config *chart.Config, resources, hooks []runtime.Object, err error) error {
+	err := o.Visitor.Visit(func(c *chart.Chart, err error) error {
 		if err != nil {
 			return err
 		}
 
 		if o.ShowDiff {
-			err = o.DiffOptions.Diff(config, resources, hooks)
+			err = o.DiffOptions.Diff(c)
 			if err != nil {
 				return err
 			}
 		}
 
-		buf, err := o.Serializer.Encode(resources)
+		buf, err := o.Serializer.Encode(c.Resources.GetObjects())
 		if err != nil {
 			return err
 		}
@@ -177,7 +191,7 @@ func (o *ApplyOptions) Run() error {
 		// We need to use a tempfile here instead of a stream as
 		// apply.ApplyOption requires that and we do not want to duplicate its
 		// huge Run() method to override this.
-		f, err := ioutil.TempFile("", config.Name)
+		f, err := ioutil.TempFile("", c.Config.Name)
 		if err != nil {
 			return err
 		}
@@ -191,13 +205,61 @@ func (o *ApplyOptions) Run() error {
 
 		defer os.Remove(f.Name())
 
-		applier := o.createApplier(config.Name, f.Name())
+		err = o.HookExecutor.ExecHooks(c, chart.PreApplyHook)
+		if err != nil {
+			return err
+		}
 
-		return applier.Run()
+		applier := o.createApplier(c, f.Name())
+
+		err = applier.Run()
+		if err != nil {
+			return err
+		}
+
+		return o.HookExecutor.ExecHooks(c, chart.PostApplyHook)
+	})
+	if err != nil {
+		return err
+	}
+
+	return o.Recorder.Objects("pruned").Visit(func(obj runtime.Object, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !resources.IsOfKind(obj, resources.KindStatefulSet) {
+			return nil
+		}
+
+		policy, err := chart.GetDeletionPolicy(obj)
+		if err != nil || policy != chart.DeletionPolicyDeletePVCs {
+			return err
+		}
+
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return errors.Errorf("illegal object type: %T", obj)
+		}
+
+		resourceDeleter := &ResourceDeleter{
+			IOStreams:       o.IOStreams,
+			DynamicClient:   o.DynamicClient,
+			DryRun:          o.DryRun || o.ServerDryRun,
+			WaitForDeletion: true,
+			Builder: o.BuilderFactory().
+				Unstructured().
+				ContinueOnError().
+				NamespaceParam(u.GetNamespace()).DefaultNamespace().
+				ResourceTypeOrNameArgs(true, resources.KindPersistentVolumeClaim).
+				LabelSelector(chart.PersistentVolumeClaimSelector(u.GetName())),
+		}
+
+		return resourceDeleter.Delete()
 	})
 }
 
-func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOptions {
+func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.ApplyOptions {
 	return &apply.ApplyOptions{
 		IOStreams:    o.IOStreams,
 		DryRun:       o.DryRun,
@@ -205,7 +267,7 @@ func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOpt
 		Overwrite:    true,
 		OpenAPIPatch: true,
 		Prune:        true,
-		Selector:     chart.LabelSelector(chartName),
+		Selector:     c.LabelSelector(),
 		DeleteOptions: &delete.DeleteOptions{
 			Cascade:         true,
 			GracePeriod:     -1,
@@ -245,4 +307,152 @@ func (o *ApplyOptions) createApplier(chartName, filename string) *apply.ApplyOpt
 			return printers.NewRecordingPrinter(o.Recorder, operation, p), nil
 		},
 	}
+}
+
+// HookExecutor executes chart lifecycle hooks.
+type HookExecutor struct {
+	genericclioptions.IOStreams
+	DynamicClient  dynamic.Interface
+	BuilderFactory func() *resource.Builder
+	Mapper         meta.RESTMapper
+	DryRun         bool
+}
+
+// ExecHooks executes hooks of hookType from chart c. It will attempt to delete
+// job hooks matching a label selector that are already deployed to the cluster
+// before creating the hooks to prevent errors.
+func (e *HookExecutor) ExecHooks(c *chart.Chart, hookType string) error {
+	hooks := c.Hooks.Type(hookType)
+
+	if len(hooks) == 0 {
+		return nil
+	}
+
+	// Make sure that there are no conflicting hooks present in the cluster.
+	err := e.cleanupHooks(c, hookType)
+	if err != nil {
+		return err
+	}
+
+	hookInfos := make([]*resource.Info, 0)
+
+	err = hooks.EachItem(func(hook *chart.Hook) error {
+		e.PrintHook(hook, "triggered")
+
+		if e.DryRun {
+			return nil
+		}
+
+		gvk := hook.GroupVersionKind()
+
+		gk := schema.GroupKind{
+			Group: gvk.Group,
+			Kind:  gvk.Kind,
+		}
+
+		mapping, err := e.Mapper.RESTMapping(gk, gvk.Version)
+		if err != nil {
+			return err
+		}
+
+		res := e.DynamicClient.
+			Resource(mapping.Resource).
+			Namespace(hook.GetNamespace())
+
+		obj, err := res.Create(hook.Unstructured, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+
+		info := &resource.Info{
+			Mapping:         mapping,
+			Namespace:       obj.GetNamespace(),
+			Name:            obj.GetName(),
+			Object:          obj,
+			ResourceVersion: obj.GetResourceVersion(),
+		}
+
+		hookInfos = append(hookInfos, info)
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return e.waitForCompletion(hookInfos)
+}
+
+func (e *HookExecutor) cleanupHooks(c *chart.Chart, hookType string) error {
+	builder := e.BuilderFactory().
+		Unstructured().
+		ContinueOnError().
+		RequireObject(false).
+		AllNamespaces(true).
+		ResourceTypeOrNameArgs(true, resources.KindJob).
+		LabelSelector(c.HookLabelSelector(hookType))
+
+	resourceDeleter := &ResourceDeleter{
+		IOStreams:       e.IOStreams,
+		DynamicClient:   e.DynamicClient,
+		DryRun:          e.DryRun,
+		WaitForDeletion: true,
+		Builder:         builder,
+	}
+
+	return resourceDeleter.Delete()
+}
+
+func (e *HookExecutor) waitForCompletion(infos []*resource.Info) error {
+	visitor := resource.InfoListVisitor(infos)
+
+	waitOptions := cmdwait.WaitOptions{
+		IOStreams:      e.IOStreams,
+		ResourceFinder: genericclioptions.ResourceFinderForResult(visitor),
+		DynamicClient:  e.DynamicClient,
+		Timeout:        24 * time.Hour,
+		Printer:        &kprinters.NamePrinter{},
+		ConditionFn:    IsComplete,
+	}
+
+	err := waitOptions.RunWait()
+	if apierrors.IsForbidden(err) || apierrors.IsMethodNotSupported(err) {
+		// if we're forbidden from waiting, we shouldn't fail.
+		// if the resource doesn't support a verb we need, we shouldn't fail.
+		klog.V(1).Info(err)
+		return nil
+	}
+
+	if statusError, ok := err.(*StatusFailedError); ok && statusError != nil {
+		// Failed hooks are annoying but we do not want to stop because of
+		// that.
+		fmt.Fprintln(e.ErrOut, statusError.Error())
+		return nil
+	}
+
+	return err
+}
+
+// PrintHook prints a hooks.
+func (e *HookExecutor) PrintHook(hook *chart.Hook, operation string) {
+	groupKind := hook.GroupVersionKind()
+	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
+	if len(groupKind.Group) == 0 {
+		kindString = strings.ToLower(groupKind.Kind)
+	}
+
+	if timeout, err := hook.WaitTimeout(); err != nil {
+		// In case the timeout fails to parse, we just log the error and use
+		// default
+		klog.V(1).Info(err)
+		return
+	} else if timeout > 0 {
+		operation = fmt.Sprintf("%s (timeout %s)", operation, timeout)
+	}
+
+	if e.DryRun {
+		operation = fmt.Sprintf("%s (dry run)", operation)
+	}
+
+	fmt.Fprintf(e.Out, "hook %s/%s %s\n", kindString, hook.GetName(), operation)
 }

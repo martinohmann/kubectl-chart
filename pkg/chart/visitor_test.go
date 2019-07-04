@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type testVisitor struct {
@@ -15,7 +14,7 @@ type testVisitor struct {
 	seenHooks     map[string]int
 }
 
-func (v *testVisitor) Handle(config *Config, resources, hooks []runtime.Object, err error) error {
+func (v *testVisitor) Handle(c *Chart, err error) error {
 	if err != nil {
 		return err
 	}
@@ -31,8 +30,8 @@ func (v *testVisitor) Handle(config *Config, resources, hooks []runtime.Object, 
 		v.seenHooks = make(map[string]int)
 	}
 
-	v.seenResources[config.Name] = len(resources)
-	v.seenHooks[config.Name] = len(hooks)
+	v.seenResources[c.Config.Name] = len(c.Resources.GetObjects())
+	v.seenHooks[c.Config.Name] = len(c.Hooks.GetObjects())
 
 	return nil
 }
