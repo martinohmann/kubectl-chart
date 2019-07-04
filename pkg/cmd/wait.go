@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
@@ -19,7 +20,9 @@ import (
 	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
 )
 
-// IsComplete is a cmdwait.ConditionFunc for waiting on a job to be complete.
+// IsComplete is a cmdwait.ConditionFunc for waiting on a job to complete. It
+// will also watch the failed status of the job and stops waiting with an error
+// if the job failed.
 func IsComplete(info *resource.Info, o *cmdwait.WaitOptions) (runtime.Object, bool, error) {
 	endTime := time.Now().Add(o.Timeout)
 	for {
@@ -90,23 +93,42 @@ func isComplete(obj *unstructured.Unstructured) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	if !found {
 		return false, nil
 	}
+
+	statusComplete, ok := getConditionStatus(conditions, "complete")
+	if ok {
+		return statusComplete == "true", nil
+	}
+
+	statusFailed, ok := getConditionStatus(conditions, "failed")
+	if ok && statusFailed == "true" {
+		return false, &StatusFailedError{Name: obj.GetName(), GroupVersionKind: obj.GroupVersionKind()}
+	}
+
+	return false, nil
+}
+
+func getConditionStatus(conditions []interface{}, name string) (string, bool) {
 	for _, conditionUncast := range conditions {
 		condition := conditionUncast.(map[string]interface{})
-		name, found, err := unstructured.NestedString(condition, "type")
-		if !found || err != nil || strings.ToLower(name) != "complete" {
+
+		typ, found, err := unstructured.NestedString(condition, "type")
+		if !found || err != nil || strings.ToLower(typ) != name {
 			continue
 		}
+
 		status, found, err := unstructured.NestedString(condition, "status")
 		if !found || err != nil {
 			continue
 		}
-		return strings.ToLower(status) == "true", nil
+
+		return strings.ToLower(status), true
 	}
 
-	return false, nil
+	return "", false
 }
 
 type completionWait struct {
@@ -134,4 +156,16 @@ func (w completionWait) isComplete(event watch.Event) (bool, error) {
 
 func extendErrWaitTimeout(err error, info *resource.Info) error {
 	return fmt.Errorf("%s on %s/%s", err.Error(), info.Mapping.Resource.Resource, info.Name)
+}
+
+// StatusFailedError is used when a job transitioned into status failed. This
+// is usually an error that might be acceptable and can be handled.
+type StatusFailedError struct {
+	Name             string
+	GroupVersionKind schema.GroupVersionKind
+}
+
+// Error implements error.
+func (e StatusFailedError) Error() string {
+	return fmt.Sprintf("%s %q is in status failed", e.GroupVersionKind.String(), e.Name)
 }

@@ -423,6 +423,13 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info) error {
 		return nil
 	}
 
+	if statusError, ok := err.(*StatusFailedError); ok && statusError != nil {
+		// Failed hooks are annoying but we do not want to stop because of
+		// that.
+		fmt.Fprintln(e.ErrOut, statusError.Error())
+		return nil
+	}
+
 	return err
 }
 
