@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 
 	"github.com/imdario/mergo"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/proto/hapi/chart"
@@ -93,5 +94,26 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 			return nil, err
 		}
 	}
-	return nil, nil
+
+	return values, nil
+}
+
+// valuesForChart extracts the necessary parts of the values for given chart.
+func valuesForChart(chartName string, values map[string]interface{}) (map[string]interface{}, error) {
+	var chartValues map[string]interface{}
+
+	switch cv := values[chartName].(type) {
+	case map[string]interface{}:
+		chartValues = cv
+	case nil:
+		chartValues = make(map[string]interface{})
+	default:
+		return nil, errors.Errorf("values key %q needs to be a map, got %T", chartName, cv)
+	}
+
+	if globalValues, ok := values["global"]; ok {
+		chartValues["global"] = globalValues
+	}
+
+	return chartValues, nil
 }
