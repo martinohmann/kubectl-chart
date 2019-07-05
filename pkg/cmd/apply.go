@@ -11,6 +11,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -30,7 +31,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/delete"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/util/openapi"
-	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
 	"k8s.io/kubernetes/pkg/kubectl/validation"
 )
 
@@ -76,6 +76,7 @@ type ApplyOptions struct {
 	Serializer      chart.Serializer
 	Visitor         *chart.Visitor
 	HookExecutor    *HookExecutor
+	Waiter          *wait.Waiter
 
 	Namespace        string
 	EnforceNamespace bool
@@ -141,12 +142,15 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
+	o.Waiter = wait.NewDefaultWaiter(o.IOStreams, o.DynamicClient)
+
 	o.HookExecutor = &HookExecutor{
 		IOStreams:      o.IOStreams,
 		DryRun:         o.DryRun || o.ServerDryRun,
 		DynamicClient:  o.DynamicClient,
 		Mapper:         o.Mapper,
 		BuilderFactory: o.BuilderFactory,
+		Waiter:         o.Waiter,
 	}
 
 	if !o.ShowDiff {
@@ -247,6 +251,7 @@ func (o *ApplyOptions) Run() error {
 			DynamicClient:   o.DynamicClient,
 			DryRun:          o.DryRun || o.ServerDryRun,
 			WaitForDeletion: true,
+			Waiter:          o.Waiter,
 			Builder: o.BuilderFactory().
 				Unstructured().
 				ContinueOnError().
@@ -315,6 +320,7 @@ type HookExecutor struct {
 	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
 	Mapper         meta.RESTMapper
+	Waiter         *wait.Waiter
 	DryRun         bool
 }
 
@@ -397,6 +403,7 @@ func (e *HookExecutor) cleanupHooks(c *chart.Chart, hookType string) error {
 		DynamicClient:   e.DynamicClient,
 		DryRun:          e.DryRun,
 		WaitForDeletion: true,
+		Waiter:          e.Waiter,
 		Builder:         builder,
 	}
 
@@ -404,29 +411,20 @@ func (e *HookExecutor) cleanupHooks(c *chart.Chart, hookType string) error {
 }
 
 func (e *HookExecutor) waitForCompletion(infos []*resource.Info) error {
-	visitor := resource.InfoListVisitor(infos)
-
-	waitOptions := cmdwait.WaitOptions{
-		IOStreams:      e.IOStreams,
-		ResourceFinder: genericclioptions.ResourceFinderForResult(visitor),
-		DynamicClient:  e.DynamicClient,
-		Timeout:        24 * time.Hour,
-		Printer:        &kprinters.NamePrinter{},
-		ConditionFn:    IsComplete,
+	req := &wait.Request{
+		ConditionFn: wait.IsComplete,
+		Options: wait.Options{
+			Timeout:      24 * time.Hour,
+			AllowFailure: true,
+		},
+		Visitor: resource.InfoListVisitor(infos),
 	}
 
-	err := waitOptions.RunWait()
+	err := e.Waiter.Wait(req)
 	if apierrors.IsForbidden(err) || apierrors.IsMethodNotSupported(err) {
 		// if we're forbidden from waiting, we shouldn't fail.
 		// if the resource doesn't support a verb we need, we shouldn't fail.
 		klog.V(1).Info(err)
-		return nil
-	}
-
-	if statusError, ok := err.(*StatusFailedError); ok && statusError != nil {
-		// Failed hooks are annoying but we do not want to stop because of
-		// that.
-		fmt.Fprintln(e.ErrOut, statusError.Error())
 		return nil
 	}
 

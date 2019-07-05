@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/sprig v2.20.0+incompatible // indirect
 	github.com/chai2010/gettext-go v0.0.0-20170215093142-bf70f2a70fb1 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
+	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/emicklei/go-restful v2.9.6+incompatible // indirect
