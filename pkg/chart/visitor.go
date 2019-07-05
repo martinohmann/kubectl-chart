@@ -74,7 +74,7 @@ func (v *Visitor) Visit(fn VisitorFunc) error {
 	return err
 }
 
-func (v *Visitor) buildChartConfigs(values map[string]interface{}) ([]*Config, error) {
+func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Config, error) {
 	configs := make([]*Config, 0)
 
 	if v.Options.Recursive {
