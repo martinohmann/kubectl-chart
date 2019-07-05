@@ -88,19 +88,33 @@ func (v *Visitor) buildChartConfigs(values map[string]interface{}) ([]*Config, e
 				continue
 			}
 
+			chartName := info.Name()
+
+			chartValues, err := valuesForChart(chartName, values)
+			if err != nil {
+				return nil, err
+			}
+
 			configs = append(configs, &Config{
-				Dir:       filepath.Join(v.Options.ChartDir, info.Name()),
-				Name:      info.Name(),
+				Dir:       filepath.Join(v.Options.ChartDir, chartName),
+				Name:      chartName,
 				Namespace: v.Options.Namespace,
-				Values:    values,
+				Values:    chartValues,
 			})
 		}
 	} else {
+		chartName := filepath.Base(v.Options.ChartDir)
+
+		chartValues, err := valuesForChart(chartName, values)
+		if err != nil {
+			return nil, err
+		}
+
 		configs = append(configs, &Config{
 			Dir:       v.Options.ChartDir,
-			Name:      filepath.Base(v.Options.ChartDir),
+			Name:      chartName,
 			Namespace: v.Options.Namespace,
-			Values:    values,
+			Values:    chartValues,
 		})
 	}
 
