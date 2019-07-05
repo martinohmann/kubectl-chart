@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
+	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -14,12 +15,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	kprinters "k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
 )
 
 func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
@@ -130,6 +129,7 @@ func (o *DeleteOptions) Run() error {
 			DryRun:          o.DryRun,
 			WaitForDeletion: true,
 			Builder:         builder,
+			Waiter:          wait.NewDefaultWaiter(o.IOStreams, o.DynamicClient),
 		}
 
 		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
@@ -154,6 +154,7 @@ type ResourceDeleter struct {
 	DynamicClient   dynamic.Interface
 	DryRun          bool
 	WaitForDeletion bool
+	Waiter          *wait.Waiter
 }
 
 // Delete deletes all resources matching the infos in the result returned by
@@ -172,7 +173,7 @@ func (d *ResourceDeleter) Delete() error {
 	found := 0
 
 	deletedInfos := []*resource.Info{}
-	uidMap := cmdwait.UIDMap{}
+	uidMap := wait.UIDMap{}
 
 	err := result.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
@@ -201,7 +202,7 @@ func (d *ResourceDeleter) Delete() error {
 			return err
 		}
 
-		resourceLocation := cmdwait.ResourceLocation{
+		resourceLocation := wait.ResourceLocation{
 			GroupResource: info.Mapping.Resource.GroupResource(),
 			Namespace:     info.Namespace,
 			Name:          info.Name,
@@ -232,17 +233,16 @@ func (d *ResourceDeleter) Delete() error {
 		return nil
 	}
 
-	waitOptions := cmdwait.WaitOptions{
-		IOStreams:      d.IOStreams,
-		ResourceFinder: genericclioptions.ResourceFinderForResult(resource.InfoListVisitor(deletedInfos)),
-		UIDMap:         uidMap,
-		DynamicClient:  d.DynamicClient,
-		Timeout:        24 * time.Hour,
-		Printer:        kprinters.NewDiscardingPrinter(),
-		ConditionFn:    cmdwait.IsDeleted,
+	req := &wait.Request{
+		ConditionFn: wait.IsDeleted,
+		Options: wait.Options{
+			Timeout: 24 * time.Hour,
+		},
+		Visitor: resource.InfoListVisitor(deletedInfos),
+		UIDMap:  uidMap,
 	}
 
-	err = waitOptions.RunWait()
+	err = d.Waiter.Wait(req)
 	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
 		// if we're forbidden from waiting, we shouldn't fail.
 		// if the resource doesn't support a verb we need, we shouldn't fail.

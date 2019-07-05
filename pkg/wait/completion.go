@@ -1,4 +1,4 @@
-package cmd
+package wait
 
 import (
 	"context"
@@ -17,14 +17,22 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
 	watchtools "k8s.io/client-go/tools/watch"
-	cmdwait "k8s.io/kubernetes/pkg/kubectl/cmd/wait"
+)
+
+var (
+	jobGVK = schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"}
 )
 
 // IsComplete is a cmdwait.ConditionFunc for waiting on a job to complete. It
 // will also watch the failed status of the job and stops waiting with an error
 // if the job failed.
-func IsComplete(info *resource.Info, o *cmdwait.WaitOptions) (runtime.Object, bool, error) {
+func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtime.Object, bool, error) {
+	if info.Mapping.GroupVersionKind != jobGVK {
+		return info.Object, false, &WaitSkippedError{Name: info.Name, GroupVersionKind: info.Mapping.GroupVersionKind}
+	}
+
 	endTime := time.Now().Add(o.Timeout)
+
 	for {
 		if len(info.Name) == 0 {
 			return info.Object, false, fmt.Errorf("resource name must be provided")
@@ -32,46 +40,57 @@ func IsComplete(info *resource.Info, o *cmdwait.WaitOptions) (runtime.Object, bo
 
 		nameSelector := fields.OneTermEqualSelector("metadata.name", info.Name).String()
 
-		var gottenObj *unstructured.Unstructured
-		// List with a name field selector to get the current resourceVersion to watch from (not the object's resourceVersion)
-		gottenObjList, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).List(metav1.ListOptions{FieldSelector: nameSelector})
+		var obj *unstructured.Unstructured
+		// List with a name field selector to get the current resourceVersion
+		// to watch from (not the object's resourceVersion)
+		objList, err := w.DynamicClient.
+			Resource(info.Mapping.Resource).
+			Namespace(info.Namespace).
+			List(metav1.ListOptions{FieldSelector: nameSelector})
 
-		resourceVersion := ""
+		var resourceVersion string
+
 		switch {
 		case err != nil:
 			return info.Object, false, err
-		case len(gottenObjList.Items) != 1:
-			resourceVersion = gottenObjList.GetResourceVersion()
+		case len(objList.Items) != 1:
+			resourceVersion = objList.GetResourceVersion()
 		default:
-			gottenObj = &gottenObjList.Items[0]
-			complete, err := isComplete(gottenObj)
+			obj = &objList.Items[0]
+			complete, err := isComplete(obj)
 			if complete {
-				return gottenObj, true, nil
+				return obj, true, nil
 			}
 			if err != nil {
-				return gottenObj, false, err
+				return obj, false, err
 			}
-			resourceVersion = gottenObjList.GetResourceVersion()
+			resourceVersion = objList.GetResourceVersion()
 		}
 
-		watchOptions := metav1.ListOptions{}
-		watchOptions.FieldSelector = nameSelector
-		watchOptions.ResourceVersion = resourceVersion
-		objWatch, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Watch(watchOptions)
+		watchOptions := metav1.ListOptions{
+			FieldSelector:   nameSelector,
+			ResourceVersion: resourceVersion,
+		}
+
+		objWatch, err := w.DynamicClient.
+			Resource(info.Mapping.Resource).
+			Namespace(info.Namespace).
+			Watch(watchOptions)
 		if err != nil {
-			return gottenObj, false, err
+			return obj, false, err
 		}
 
-		timeout := endTime.Sub(time.Now())
-		errWaitTimeoutWithName := extendErrWaitTimeout(wait.ErrWaitTimeout, info)
-		if timeout < 0 {
-			// we're out of time
-			return gottenObj, false, errWaitTimeoutWithName
+		errWaitTimeout := waitTimeoutError(err, info)
+		if endTime.Sub(time.Now()) < 0 {
+			return obj, false, errWaitTimeout
 		}
 
 		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
-		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, completionWait{o.ErrOut}.isComplete)
+
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, completionWait{w.ErrOut}.isComplete)
+
 		cancel()
+
 		switch {
 		case err == nil:
 			return watchEvent.Object, true, nil
@@ -79,11 +98,12 @@ func IsComplete(info *resource.Info, o *cmdwait.WaitOptions) (runtime.Object, bo
 			continue
 		case err == wait.ErrWaitTimeout:
 			if watchEvent != nil {
-				return watchEvent.Object, false, errWaitTimeoutWithName
+				return watchEvent.Object, false, errWaitTimeout
 			}
-			return gottenObj, false, errWaitTimeoutWithName
+
+			return obj, false, errWaitTimeout
 		default:
-			return gottenObj, false, err
+			return obj, false, err
 		}
 	}
 }
@@ -105,10 +125,10 @@ func isComplete(obj *unstructured.Unstructured) (bool, error) {
 
 	statusFailed, ok := getConditionStatus(conditions, "failed")
 	if ok && statusFailed == "true" {
-		return false, &StatusFailedError{Name: obj.GetName(), GroupVersionKind: obj.GroupVersionKind()}
+		err = &StatusFailedError{Name: obj.GetName(), GroupVersionKind: obj.GroupVersionKind()}
 	}
 
-	return false, nil
+	return false, err
 }
 
 func getConditionStatus(conditions []interface{}, name string) (string, bool) {
@@ -152,20 +172,4 @@ func (w completionWait) isComplete(event watch.Event) (bool, error) {
 	obj := event.Object.(*unstructured.Unstructured)
 
 	return isComplete(obj)
-}
-
-func extendErrWaitTimeout(err error, info *resource.Info) error {
-	return fmt.Errorf("%s on %s/%s", err.Error(), info.Mapping.Resource.Resource, info.Name)
-}
-
-// StatusFailedError is used when a job transitioned into status failed. This
-// is usually an error that might be acceptable and can be handled.
-type StatusFailedError struct {
-	Name             string
-	GroupVersionKind schema.GroupVersionKind
-}
-
-// Error implements error.
-func (e StatusFailedError) Error() string {
-	return fmt.Sprintf("%s %q is in status failed", e.GroupVersionKind.String(), e.Name)
 }
