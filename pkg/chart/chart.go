@@ -37,7 +37,7 @@ type Config struct {
 	Dir       string
 	Name      string
 	Namespace string
-	Values    map[string]interface{}
+	Values    map[interface{}]interface{}
 }
 
 // Render takes a chart config and renders the chart. It returns a map of
@@ -73,8 +73,8 @@ func Render(config *Config) (map[string]string, error) {
 // map. The contents are merged left to right, and will overwrite keys present
 // in files that are loaded earlier. This makes it possible to layer values
 // files.
-func LoadValues(files ...string) (map[string]interface{}, error) {
-	values := make(map[string]interface{})
+func LoadValues(files ...string) (map[interface{}]interface{}, error) {
+	values := make(map[interface{}]interface{})
 
 	for _, f := range files {
 		buf, err := ioutil.ReadFile(f)
@@ -82,7 +82,7 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 			return nil, err
 		}
 
-		var v map[string]interface{}
+		var v map[interface{}]interface{}
 
 		err = yaml.Unmarshal(buf, &v)
 		if err != nil {
@@ -99,14 +99,14 @@ func LoadValues(files ...string) (map[string]interface{}, error) {
 }
 
 // valuesForChart extracts the necessary parts of the values for given chart.
-func valuesForChart(chartName string, values map[string]interface{}) (map[string]interface{}, error) {
-	var chartValues map[string]interface{}
+func valuesForChart(chartName string, values map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+	var chartValues map[interface{}]interface{}
 
 	switch cv := values[chartName].(type) {
-	case map[string]interface{}:
+	case map[interface{}]interface{}:
 		chartValues = cv
 	case nil:
-		chartValues = make(map[string]interface{})
+		chartValues = make(map[interface{}]interface{})
 	default:
 		return nil, errors.Errorf("values key %q needs to be a map, got %T", chartName, cv)
 	}

@@ -10,46 +10,46 @@ import (
 func TestValuesForChart(t *testing.T) {
 	cases := []struct {
 		name        string
-		values      map[string]interface{}
-		expected    map[string]interface{}
+		values      map[interface{}]interface{}
+		expected    map[interface{}]interface{}
 		expectError bool
 		chartName   string
 	}{
 		{
 			name:      "empty values",
-			expected:  map[string]interface{}{},
+			expected:  map[interface{}]interface{}{},
 			chartName: "foo",
 		},
 		{
 			name: "found chart key",
-			values: map[string]interface{}{
-				"foo": map[string]interface{}{
+			values: map[interface{}]interface{}{
+				"foo": map[interface{}]interface{}{
 					"bar": "baz",
 				},
-				"bar": map[string]interface{}{
+				"bar": map[interface{}]interface{}{
 					"baz": "qux",
 				},
 			},
-			expected: map[string]interface{}{
+			expected: map[interface{}]interface{}{
 				"bar": "baz",
 			},
 			chartName: "foo",
 		},
 		{
 			name: "found chart key and globals",
-			values: map[string]interface{}{
-				"global": map[string]interface{}{
+			values: map[interface{}]interface{}{
+				"global": map[interface{}]interface{}{
 					"someglobal": "somevalue",
 				},
-				"foo": map[string]interface{}{
+				"foo": map[interface{}]interface{}{
 					"bar": "baz",
 				},
-				"bar": map[string]interface{}{
+				"bar": map[interface{}]interface{}{
 					"baz": "qux",
 				},
 			},
-			expected: map[string]interface{}{
-				"global": map[string]interface{}{
+			expected: map[interface{}]interface{}{
+				"global": map[interface{}]interface{}{
 					"someglobal": "somevalue",
 				},
 				"bar": "baz",
@@ -58,15 +58,15 @@ func TestValuesForChart(t *testing.T) {
 		},
 		{
 			name: "explicit nil",
-			values: map[string]interface{}{
+			values: map[interface{}]interface{}{
 				"foo": nil,
 			},
-			expected:  map[string]interface{}{},
+			expected:  map[interface{}]interface{}{},
 			chartName: "foo",
 		},
 		{
 			name: "type mismatch",
-			values: map[string]interface{}{
+			values: map[interface{}]interface{}{
 				"foo": "bar",
 			},
 			expectError: true,

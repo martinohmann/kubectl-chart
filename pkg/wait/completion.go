@@ -80,7 +80,7 @@ func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runti
 			return obj, false, err
 		}
 
-		errWaitTimeout := waitTimeoutError(err, info)
+		errWaitTimeout := waitTimeoutError(wait.ErrWaitTimeout, info)
 		if endTime.Sub(time.Now()) < 0 {
 			return obj, false, errWaitTimeout
 		}
