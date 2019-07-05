@@ -13,7 +13,7 @@ func TestProcessor_Process(t *testing.T) {
 		Dir:       "testdata/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
-		Values:    map[string]interface{}{},
+		Values:    map[interface{}]interface{}{},
 	}
 
 	p := NewDefaultProcessor()
@@ -119,7 +119,7 @@ func TestProcessor_ProcessInvalidHook(t *testing.T) {
 		Dir:       "testdata/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
-		Values: map[string]interface{}{
+		Values: map[interface{}]interface{}{
 			"hookType": "foo",
 		},
 	}
