@@ -50,7 +50,7 @@ type DeleteOptions struct {
 	Visitor        *chart.Visitor
 	HookExecutor   *chart.HookExecutor
 	Deleter        deletions.Deleter
-	Waiter         *wait.Waiter
+	Waiter         wait.Waiter
 
 	Namespace        string
 	EnforceNamespace bool
@@ -90,8 +90,8 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Waiter = wait.NewDefaultWaiter(o.IOStreams, o.DynamicClient)
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.Waiter)
+	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
+	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient)
 
 	o.HookExecutor = &chart.HookExecutor{
 		IOStreams:      o.IOStreams,
@@ -143,20 +143,15 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		infos, err := result.Infos()
-		if err != nil {
-			return err
-		}
-
 		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
 		if err != nil {
 			return err
 		}
 
 		err = o.Deleter.Delete(&deletions.Request{
-			DryRun:          o.DryRun,
-			WaitForDeletion: true,
-			Visitor:         resource.InfoListVisitor(infos),
+			DryRun:  o.DryRun,
+			Waiter:  o.Waiter,
+			Visitor: result,
 		})
 		if err != nil {
 			return err

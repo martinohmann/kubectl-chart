@@ -12,7 +12,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/dynamic"
 )
 
 // Options are wait options for a single resource.
@@ -43,10 +42,14 @@ type Request struct {
 
 	// Visitor will be used to walk the resources that should be waited on.
 	Visitor resource.Visitor
+}
 
-	// UID is a map of resource locations to UIDs which can help in identifying
-	// objects while waiting.
-	UIDMap UIDMap
+// Waiter waits for a condition to meet.
+type Waiter interface {
+	// Wait waits for all resources using the provided options. If no condition
+	// func is defined in the options the default condition to wait for is
+	// resource deletion.
+	Wait(r *Request) error
 }
 
 // OptionsFor returns Options for a resource info. If the resource has a UID
@@ -79,35 +82,32 @@ type UIDMap map[ResourceLocation]types.UID
 // ConditionFunc is called for every resource that is waited for. It should
 // check if the waiting condition is met or not, and if errors occured while
 // waiting.
-type ConditionFunc func(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtime.Object, bool, error)
+type ConditionFunc func(info *resource.Info, o Options) (runtime.Object, bool, error)
 
-// Waiter is a generic waiter.
-type Waiter struct {
+// waiter is a generic Waiter implementation.
+type waiter struct {
 	genericclioptions.IOStreams
 
-	Printer       printers.ResourcePrinter
-	DynamicClient dynamic.Interface
+	Printer printers.ResourcePrinter
 }
 
-// NewDefaultWaiter creates a new *Waiter which uses a printers.Nameprinter to
-// print wait status.
-func NewDefaultWaiter(streams genericclioptions.IOStreams, client dynamic.Interface) *Waiter {
-	return NewWaiter(streams, &printers.NamePrinter{}, client)
+// NewDefaultWaiter creates a new Waiter which discards all wait output.
+func NewDefaultWaiter(streams genericclioptions.IOStreams) Waiter {
+	return NewWaiter(streams, printers.NewDiscardingPrinter())
 }
 
-// NewWaiter creates a new *Waiter value.
-func NewWaiter(streams genericclioptions.IOStreams, p printers.ResourcePrinter, client dynamic.Interface) *Waiter {
-	return &Waiter{
-		IOStreams:     streams,
-		Printer:       p,
-		DynamicClient: client,
+// NewWaiter creates a new Waiter value.
+func NewWaiter(streams genericclioptions.IOStreams, p printers.ResourcePrinter) Waiter {
+	return &waiter{
+		IOStreams: streams,
+		Printer:   p,
 	}
 }
 
 // Waiter waits for all resources using the provided options. If no condition
 // func is defined in the options the default condition to wait for is resource
 // deletion.
-func (w *Waiter) Wait(r *Request) error {
+func (w *waiter) Wait(r *Request) error {
 	err := r.Visitor.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
@@ -115,7 +115,7 @@ func (w *Waiter) Wait(r *Request) error {
 
 		options := r.OptionsFor(info)
 
-		obj, success, err := r.ConditionFn(info, w, options, r.UIDMap)
+		obj, success, err := r.ConditionFn(info, options)
 		if success {
 			w.Printer.PrintObj(obj, w.Out)
 			return nil

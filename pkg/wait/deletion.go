@@ -13,11 +13,31 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/dynamic"
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
-// IsDeleted is a condition func for waiting for something to be deleted
-func IsDeleted(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtime.Object, bool, error) {
+type DeletionWait struct {
+	DynamicClient dynamic.Interface
+	ErrOut        io.Writer
+
+	// UID is a map of resource locations to UIDs which can help in identifying
+	// objects while waiting.
+	UIDMap UIDMap
+}
+
+func NewDeletedConditionFunc(client dynamic.Interface, errOut io.Writer, uidMap UIDMap) ConditionFunc {
+	w := DeletionWait{
+		DynamicClient: client,
+		ErrOut:        errOut,
+		UIDMap:        uidMap,
+	}
+
+	return w.ConditionFunc
+}
+
+// ConditionFunc waits for something to be deleted.
+func (w DeletionWait) ConditionFunc(info *resource.Info, o Options) (runtime.Object, bool, error) {
 	endTime := time.Now().Add(o.Timeout)
 
 	for {
@@ -52,7 +72,7 @@ func IsDeleted(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtim
 			Name:          obj.GetName(),
 		}
 
-		if uid, ok := uidMap[resourceLocation]; ok {
+		if uid, ok := w.UIDMap[resourceLocation]; ok {
 			if obj.GetUID() != uid {
 				return obj, true, nil
 			}
@@ -78,7 +98,7 @@ func IsDeleted(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtim
 
 		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
 
-		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, deletionWait{errOut: w.ErrOut}.isDeleted)
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, w.isDeleted)
 
 		cancel()
 
@@ -99,17 +119,13 @@ func IsDeleted(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtim
 	}
 }
 
-type deletionWait struct {
-	errOut io.Writer
-}
-
-func (w deletionWait) isDeleted(event watch.Event) (bool, error) {
+func (w DeletionWait) isDeleted(event watch.Event) (bool, error) {
 	switch event.Type {
 	case watch.Error:
 		// keep waiting in the event we see an error - we expect the watch to be closed by
 		// the server if the error is unrecoverable.
 		err := apierrors.FromObject(event.Object)
-		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
+		fmt.Fprintf(w.ErrOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
 		return false, nil
 	case watch.Deleted:
 		return true, nil

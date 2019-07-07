@@ -9,11 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
-	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
 
 // Request is a request for resource deletions.
@@ -24,9 +24,8 @@ type Request struct {
 	// DryRun if enabled, deletion is only simulated and printed.
 	DryRun bool
 
-	// WaitForDeletion will enabled waiting until the resources are completely
-	// deleted from the cluster.
-	WaitForDeletion bool
+	// Waiter if not nil, the waiter will be used to wait for object deletion.
+	Waiter wait.Waiter
 }
 
 // Deleter is a resource deleter.
@@ -38,14 +37,14 @@ type Deleter interface {
 // deleter is a Deleter implementation.
 type deleter struct {
 	genericclioptions.IOStreams
-	Waiter *wait.Waiter
+	DynamicClient dynamic.Interface
 }
 
 // NewDeleter creates a new resource deleter.
-func NewDeleter(streams genericclioptions.IOStreams, waiter *wait.Waiter) Deleter {
+func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface) Deleter {
 	return &deleter{
-		IOStreams: streams,
-		Waiter:    waiter,
+		IOStreams:     streams,
+		DynamicClient: client,
 	}
 }
 
@@ -72,7 +71,8 @@ func (d *deleter) Delete(r *Request) error {
 		found++
 
 		if r.DryRun {
-			if err = info.Get(); err != nil {
+			_, err := d.getResource(info)
+			if err != nil {
 				return err
 			}
 
@@ -81,11 +81,7 @@ func (d *deleter) Delete(r *Request) error {
 			return nil
 		}
 
-		policy := metav1.DeletePropagationBackground
-
-		response, err := d.deleteResource(info, &metav1.DeleteOptions{
-			PropagationPolicy: &policy,
-		})
+		err = d.deleteResource(info)
 		if err != nil {
 			return err
 		}
@@ -98,12 +94,7 @@ func (d *deleter) Delete(r *Request) error {
 			Name:          info.Name,
 		}
 
-		if status, ok := response.(*metav1.Status); ok && status.Details != nil {
-			uidMap[resourceLocation] = status.Details.UID
-			return nil
-		}
-
-		responseMetadata, err := meta.Accessor(response)
+		metadata, err := meta.Accessor(info.Object)
 		if err != nil {
 			// we don't have UID, but we didn't fail the delete, next best
 			// thing is just skipping the UID
@@ -111,25 +102,24 @@ func (d *deleter) Delete(r *Request) error {
 			return nil
 		}
 
-		uidMap[resourceLocation] = responseMetadata.GetUID()
+		uidMap[resourceLocation] = metadata.GetUID()
 
 		return nil
 	})
-	if err != nil || found == 0 {
+	if (err != nil && !errors.IsNotFound(err)) || found == 0 {
 		return err
 	}
 
-	if !r.WaitForDeletion || r.DryRun {
+	if r.Waiter == nil || r.DryRun {
 		return nil
 	}
 
-	err = d.Waiter.Wait(&wait.Request{
-		ConditionFn: wait.IsDeleted,
+	err = r.Waiter.Wait(&wait.Request{
+		ConditionFn: wait.NewDeletedConditionFunc(d.DynamicClient, d.ErrOut, uidMap),
 		Options: wait.Options{
 			Timeout: 24 * time.Hour,
 		},
 		Visitor: resource.InfoListVisitor(deletedInfos),
-		UIDMap:  uidMap,
 	})
 	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
 		// if we're forbidden from waiting, we shouldn't fail.
@@ -140,16 +130,22 @@ func (d *deleter) Delete(r *Request) error {
 
 	return err
 }
+func (d *deleter) getResource(info *resource.Info) (*unstructured.Unstructured, error) {
+	return d.DynamicClient.
+		Resource(info.Mapping.Resource).
+		Namespace(info.Namespace).
+		Get(info.Name, metav1.GetOptions{})
+}
 
-func (d *deleter) deleteResource(info *resource.Info, deleteOptions *metav1.DeleteOptions) (runtime.Object, error) {
-	response, err := resource.NewHelper(info.Client, info.Mapping).
-		DeleteWithOptions(info.Namespace, info.Name, deleteOptions)
+func (d *deleter) deleteResource(info *resource.Info) error {
+	policy := metav1.DeletePropagationBackground
 
-	if err != nil {
-		return nil, cmdutil.AddSourceToErr("deleting", info.Source, err)
-	}
-
-	return response, nil
+	return d.DynamicClient.
+		Resource(info.Mapping.Resource).
+		Namespace(info.Namespace).
+		Delete(info.Name, &metav1.DeleteOptions{
+			PropagationPolicy: &policy,
+		})
 }
 
 // PrintObj prints out the object that was deleted (or would be deleted if dry
