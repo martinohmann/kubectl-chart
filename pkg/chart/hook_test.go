@@ -309,8 +309,8 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeClient := tc.fakeClient()
-			deleter := deletions.NewFakeDeleter(nil)
-			waiter := wait.NewFakeWaiter(nil)
+			deleter := deletions.NewFakeDeleter(tc.deleteHandler)
+			waiter := wait.NewFakeWaiter(tc.waitHandler)
 
 			e := &HookExecutor{
 				IOStreams:     genericclioptions.NewTestIOStreamsDiscard(),
