@@ -141,7 +141,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	o.Waiter = wait.NewDefaultWaiter(o.IOStreams, o.DynamicClient)
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.Waiter)
+	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient)
 
 	o.HookExecutor = &chart.HookExecutor{
 		IOStreams:      o.IOStreams,
@@ -259,15 +259,10 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
-		infos, err := result.Infos()
-		if err != nil {
-			return err
-		}
-
 		return o.Deleter.Delete(&deletions.Request{
-			DryRun:          o.DryRun || o.ServerDryRun,
-			WaitForDeletion: true,
-			Visitor:         resource.InfoListVisitor(infos),
+			DryRun:  o.DryRun || o.ServerDryRun,
+			Waiter:  o.Waiter,
+			Visitor: result,
 		})
 	})
 }

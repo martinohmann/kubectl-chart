@@ -109,15 +109,10 @@ func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
 		return err
 	}
 
-	infos, err := result.Infos()
-	if err != nil {
-		return err
-	}
-
 	return e.Deleter.Delete(&deletions.Request{
-		DryRun:          e.DryRun,
-		WaitForDeletion: true,
-		Visitor:         resource.InfoListVisitor(infos),
+		DryRun:  e.DryRun,
+		Waiter:  e.Waiter,
+		Visitor: result,
 	})
 }
 
