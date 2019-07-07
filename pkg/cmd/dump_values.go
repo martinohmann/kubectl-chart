@@ -28,8 +28,7 @@ func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericcliop
   kubectl chart dump-values --chart-dir ~/charts --recursive --value-file ~/some/additional/values.yaml
 
   # Dump values for multiple charts with filter
-  kubectl chart dump-values --chart-dir ~/charts --recursive --chart-filter mychart
-`,
+  kubectl chart dump-values --chart-dir ~/charts --recursive --chart-filter mychart`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
