@@ -76,7 +76,7 @@ func TestValuesForChart(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			chartValues, err := valuesForChart(tc.chartName, tc.values)
+			chartValues, err := ValuesForChart(tc.chartName, tc.values)
 
 			if tc.expectError {
 				require.Error(t, err)

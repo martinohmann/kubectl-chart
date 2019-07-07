@@ -90,7 +90,7 @@ func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Conf
 
 			chartName := info.Name()
 
-			chartValues, err := valuesForChart(chartName, values)
+			chartValues, err := ValuesForChart(chartName, values)
 			if err != nil {
 				return nil, err
 			}
@@ -105,7 +105,7 @@ func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Conf
 	} else {
 		chartName := filepath.Base(v.Options.ChartDir)
 
-		chartValues, err := valuesForChart(chartName, values)
+		chartValues, err := ValuesForChart(chartName, values)
 		if err != nil {
 			return nil, err
 		}
@@ -122,15 +122,5 @@ func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Conf
 }
 
 func (v *Visitor) includeChart(chartName string) bool {
-	if len(v.Options.ChartFilter) == 0 {
-		return true
-	}
-
-	for _, name := range v.Options.ChartFilter {
-		if name == chartName {
-			return true
-		}
-	}
-
-	return false
+	return Include(v.Options.ChartFilter, chartName)
 }

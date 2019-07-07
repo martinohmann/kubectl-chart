@@ -98,8 +98,8 @@ func LoadValues(files ...string) (map[interface{}]interface{}, error) {
 	return values, nil
 }
 
-// valuesForChart extracts the necessary parts of the values for given chart.
-func valuesForChart(chartName string, values map[interface{}]interface{}) (map[interface{}]interface{}, error) {
+// ValuesForChart extracts the necessary parts of the values for given chart.
+func ValuesForChart(chartName string, values map[interface{}]interface{}) (map[interface{}]interface{}, error) {
 	var chartValues map[interface{}]interface{}
 
 	switch cv := values[chartName].(type) {
@@ -116,4 +116,20 @@ func valuesForChart(chartName string, values map[interface{}]interface{}) (map[i
 	}
 
 	return chartValues, nil
+}
+
+// Include returns true if chartName is included in chartFilter or if
+// chartFilter is empty.
+func Include(chartFilter []string, chartName string) bool {
+	if len(chartFilter) == 0 {
+		return true
+	}
+
+	for _, name := range chartFilter {
+		if name == chartName {
+			return true
+		}
+	}
+
+	return false
 }
