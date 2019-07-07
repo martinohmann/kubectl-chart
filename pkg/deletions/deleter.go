@@ -25,7 +25,7 @@ type Request struct {
 	DryRun bool
 
 	// Waiter if not nil, the waiter will be used to wait for object deletion.
-	Waiter *wait.Waiter
+	Waiter wait.Waiter
 }
 
 // Deleter is a resource deleter.
@@ -94,7 +94,7 @@ func (d *deleter) Delete(r *Request) error {
 			Name:          info.Name,
 		}
 
-		responseMetadata, err := meta.Accessor(info.Object)
+		metadata, err := meta.Accessor(info.Object)
 		if err != nil {
 			// we don't have UID, but we didn't fail the delete, next best
 			// thing is just skipping the UID
@@ -102,7 +102,7 @@ func (d *deleter) Delete(r *Request) error {
 			return nil
 		}
 
-		uidMap[resourceLocation] = responseMetadata.GetUID()
+		uidMap[resourceLocation] = metadata.GetUID()
 
 		return nil
 	})
@@ -115,12 +115,11 @@ func (d *deleter) Delete(r *Request) error {
 	}
 
 	err = r.Waiter.Wait(&wait.Request{
-		ConditionFn: wait.IsDeleted,
+		ConditionFn: wait.NewDeletedConditionFunc(d.DynamicClient, d.ErrOut, uidMap),
 		Options: wait.Options{
 			Timeout: 24 * time.Hour,
 		},
 		Visitor: resource.InfoListVisitor(deletedInfos),
-		UIDMap:  uidMap,
 	})
 	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
 		// if we're forbidden from waiting, we shouldn't fail.

@@ -2,13 +2,24 @@ package chart
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/klog"
 )
 
 const (
@@ -41,6 +52,16 @@ func (h *Hook) RestartPolicy() string {
 
 func (h *Hook) Type() string {
 	return h.nestedString("metadata", "annotations", AnnotationHookType)
+}
+
+func (h *Hook) AllowFailure() bool {
+	value := h.nestedString("metadata", "annotations", AnnotationHookAllowFailure)
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+
+	return b
 }
 
 func (h *Hook) WaitTimeout() (time.Duration, error) {
@@ -171,4 +192,172 @@ func ValidateHook(h *Hook) error {
 	}
 
 	return nil
+}
+
+// HookExecutor executes chart lifecycle hooks.
+type HookExecutor struct {
+	genericclioptions.IOStreams
+	DynamicClient  dynamic.Interface
+	BuilderFactory func() *resource.Builder
+	Mapper         meta.RESTMapper
+	Deleter        deletions.Deleter
+	Waiter         wait.Waiter
+	DryRun         bool
+}
+
+// ExecHooks executes hooks of hookType from chart c. It will attempt to delete
+// job hooks matching a label selector that are already deployed to the cluster
+// before creating the hooks to prevent errors.
+func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
+	hooks := c.Hooks.Type(hookType)
+
+	if len(hooks) == 0 {
+		return nil
+	}
+
+	// Make sure that there are no conflicting hooks present in the cluster.
+	err := e.cleanupHooks(c, hookType)
+	if err != nil {
+		return err
+	}
+
+	infos := make([]*resource.Info, 0)
+	resourceOptions := make(wait.ResourceOptions)
+
+	err = hooks.EachItem(func(hook *Hook) error {
+		e.PrintHook(hook, "triggered")
+
+		if e.DryRun {
+			return nil
+		}
+
+		gvk := hook.GroupVersionKind()
+
+		gk := schema.GroupKind{
+			Group: gvk.Group,
+			Kind:  gvk.Kind,
+		}
+
+		mapping, err := e.Mapper.RESTMapping(gk, gvk.Version)
+		if err != nil {
+			return err
+		}
+
+		res := e.DynamicClient.
+			Resource(mapping.Resource).
+			Namespace(hook.GetNamespace())
+
+		obj, err := res.Create(hook.Unstructured, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+
+		info := &resource.Info{
+			Mapping:         mapping,
+			Namespace:       obj.GetNamespace(),
+			Name:            obj.GetName(),
+			Object:          obj,
+			ResourceVersion: obj.GetResourceVersion(),
+		}
+
+		infos = append(infos, info)
+
+		metadata, err := meta.Accessor(obj)
+		if err != nil {
+			klog.V(1).Info(err)
+			return nil
+		}
+
+		uid := metadata.GetUID()
+		if uid == "" {
+			return nil
+		}
+
+		options := wait.Options{
+			AllowFailure: hook.AllowFailure(),
+			Timeout:      DefaultHookWaitTimeout,
+		}
+
+		timeout, err := hook.WaitTimeout()
+		if err == nil && timeout > 0 {
+			options.Timeout = timeout
+		}
+
+		resourceOptions[uid] = options
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return e.waitForCompletion(infos, resourceOptions)
+}
+
+func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
+	result := e.BuilderFactory().
+		Unstructured().
+		ContinueOnError().
+		AllNamespaces(true).
+		ResourceTypeOrNameArgs(true, resources.KindJob).
+		LabelSelector(c.HookLabelSelector(hookType)).
+		Flatten().
+		Do().
+		IgnoreErrors(apierrors.IsNotFound)
+	if err := result.Err(); err != nil {
+		return err
+	}
+
+	return e.Deleter.Delete(&deletions.Request{
+		DryRun:  e.DryRun,
+		Waiter:  e.Waiter,
+		Visitor: result,
+	})
+}
+
+func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {
+	if len(infos) == 0 {
+		return nil
+	}
+
+	err := e.Waiter.Wait(&wait.Request{
+		ConditionFn: wait.NewCompletionConditionFunc(e.DynamicClient, e.ErrOut),
+		Options: wait.Options{
+			Timeout: DefaultHookWaitTimeout,
+		},
+		ResourceOptions: options,
+		Visitor:         resource.InfoListVisitor(infos),
+	})
+	if apierrors.IsForbidden(err) || apierrors.IsMethodNotSupported(err) {
+		// if we're forbidden from waiting, we shouldn't fail.
+		// if the resource doesn't support a verb we need, we shouldn't fail.
+		klog.V(1).Info(err)
+		return nil
+	}
+
+	return err
+}
+
+// PrintHook prints a hooks.
+func (e *HookExecutor) PrintHook(hook *Hook, operation string) {
+	groupKind := hook.GroupVersionKind()
+	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
+	if len(groupKind.Group) == 0 {
+		kindString = strings.ToLower(groupKind.Kind)
+	}
+
+	if timeout, err := hook.WaitTimeout(); err != nil {
+		// In case the timeout fails to parse, we just log the error and use
+		// default
+		klog.V(1).Info(err)
+		return
+	} else if timeout > 0 {
+		operation = fmt.Sprintf("%s (timeout %s)", operation, timeout)
+	}
+
+	if e.DryRun {
+		operation = fmt.Sprintf("%s (dry run)", operation)
+	}
+
+	fmt.Fprintf(e.Out, "hook %s/%s %s\n", kindString, hook.GetName(), operation)
 }

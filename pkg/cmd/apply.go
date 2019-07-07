@@ -73,7 +73,7 @@ type ApplyOptions struct {
 	Serializer      chart.Serializer
 	Visitor         *chart.Visitor
 	HookExecutor    *chart.HookExecutor
-	Waiter          *wait.Waiter
+	Waiter          wait.Waiter
 	Deleter         deletions.Deleter
 
 	Namespace        string
@@ -140,7 +140,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Waiter = wait.NewDefaultWaiter(o.IOStreams, o.DynamicClient)
+	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
 	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient)
 
 	o.HookExecutor = &chart.HookExecutor{
