@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/dynamic"
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
@@ -23,10 +24,23 @@ var (
 	jobGVK = schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"}
 )
 
-// IsComplete is a cmdwait.ConditionFunc for waiting on a job to complete. It
-// will also watch the failed status of the job and stops waiting with an error
-// if the job failed.
-func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runtime.Object, bool, error) {
+type CompletionWait struct {
+	DynamicClient dynamic.Interface
+	ErrOut        io.Writer
+}
+
+func NewCompletionConditionFunc(client dynamic.Interface, errOut io.Writer) ConditionFunc {
+	w := CompletionWait{
+		DynamicClient: client,
+		ErrOut:        errOut,
+	}
+
+	return w.ConditionFunc
+}
+
+// ConditionFunc waits on a job to complete. It will also watch the failed
+// status of the job and stops waiting with an error if the job failed.
+func (w CompletionWait) ConditionFunc(info *resource.Info, o Options) (runtime.Object, bool, error) {
 	if info.Mapping.GroupVersionKind != jobGVK {
 		return info.Object, false, &WaitSkippedError{Name: info.Name, GroupVersionKind: info.Mapping.GroupVersionKind}
 	}
@@ -57,7 +71,7 @@ func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runti
 			resourceVersion = objList.GetResourceVersion()
 		default:
 			obj = &objList.Items[0]
-			complete, err := isComplete(obj)
+			complete, err := hasStatusComplete(obj)
 			if complete {
 				return obj, true, nil
 			}
@@ -87,7 +101,7 @@ func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runti
 
 		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
 
-		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, completionWait{w.ErrOut}.isComplete)
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, w.isComplete)
 
 		cancel()
 
@@ -108,7 +122,26 @@ func IsComplete(info *resource.Info, w *Waiter, o Options, uidMap UIDMap) (runti
 	}
 }
 
-func isComplete(obj *unstructured.Unstructured) (bool, error) {
+func (w CompletionWait) isComplete(event watch.Event) (bool, error) {
+	if event.Type == watch.Error {
+		// keep waiting in the event we see an error - we expect the watch to be closed by
+		// the server
+		err := apierrors.FromObject(event.Object)
+		fmt.Fprintf(w.ErrOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
+		return false, nil
+	}
+
+	if event.Type == watch.Deleted {
+		// this will chain back out, result in another get and an return false back up the chain
+		return false, nil
+	}
+
+	obj := event.Object.(*unstructured.Unstructured)
+
+	return hasStatusComplete(obj)
+}
+
+func hasStatusComplete(obj *unstructured.Unstructured) (bool, error) {
 	conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	if err != nil {
 		return false, err
@@ -149,27 +182,4 @@ func getConditionStatus(conditions []interface{}, name string) (string, bool) {
 	}
 
 	return "", false
-}
-
-type completionWait struct {
-	errOut io.Writer
-}
-
-func (w completionWait) isComplete(event watch.Event) (bool, error) {
-	if event.Type == watch.Error {
-		// keep waiting in the event we see an error - we expect the watch to be closed by
-		// the server
-		err := apierrors.FromObject(event.Object)
-		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
-		return false, nil
-	}
-
-	if event.Type == watch.Deleted {
-		// this will chain back out, result in another get and an return false back up the chain
-		return false, nil
-	}
-
-	obj := event.Object.(*unstructured.Unstructured)
-
-	return isComplete(obj)
 }

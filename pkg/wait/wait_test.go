@@ -4,6 +4,7 @@ package wait
 // added features to ensure that the waiting behaviour is similar.
 
 import (
+	"io/ioutil"
 	"strings"
 	"testing"
 	"time"
@@ -390,19 +391,14 @@ func TestWaitForDeletion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := test.fakeClient()
 
-			w := NewWaiter(
-				genericclioptions.NewTestIOStreamsDiscard(),
-				printers.NewDiscardingPrinter(),
-				fakeClient,
-			)
+			w := NewWaiter(genericclioptions.NewTestIOStreamsDiscard(), printers.NewDiscardingPrinter())
 
 			req := &Request{
 				Options: Options{
 					Timeout: test.timeout,
 				},
 				Visitor:     resource.InfoListVisitor(test.infos),
-				ConditionFn: IsDeleted,
-				UIDMap:      test.uidMap,
+				ConditionFn: NewDeletedConditionFunc(fakeClient, ioutil.Discard, test.uidMap),
 			}
 
 			err := w.Wait(req)
@@ -788,18 +784,14 @@ func TestWaitForCompletion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := test.fakeClient()
 
-			w := NewWaiter(
-				genericclioptions.NewTestIOStreamsDiscard(),
-				printers.NewDiscardingPrinter(),
-				fakeClient,
-			)
+			w := NewWaiter(genericclioptions.NewTestIOStreamsDiscard(), printers.NewDiscardingPrinter())
 
 			req := &Request{
 				Options: Options{
 					Timeout: test.timeout,
 				},
 				Visitor:     resource.InfoListVisitor(test.infos),
-				ConditionFn: IsComplete,
+				ConditionFn: NewCompletionConditionFunc(fakeClient, ioutil.Discard),
 			}
 
 			err := w.Wait(req)

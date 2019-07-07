@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	AnnotationHookType        = "kubectl-chart/hook-type"
-	AnnotationHookWaitTimeout = "kubectl-chart/hook-wait-timeout"
-	AnnotationDeletionPolicy  = "kubectl-chart/deletion-policy"
+	AnnotationHookType         = "kubectl-chart/hook-type"
+	AnnotationHookAllowFailure = "kubectl-chart/hook-allow-failure"
+	AnnotationHookWaitTimeout  = "kubectl-chart/hook-wait-timeout"
+	AnnotationDeletionPolicy   = "kubectl-chart/deletion-policy"
 
 	DeletionPolicyDeletePVCs = "delete-pvcs"
 )
