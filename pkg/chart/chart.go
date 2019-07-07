@@ -118,6 +118,8 @@ func ValuesForChart(chartName string, values map[interface{}]interface{}) (map[i
 	return chartValues, nil
 }
 
+// Include returns true if chartName is included in chartFilter or if
+// chartFilter is empty.
 func Include(chartFilter []string, chartName string) bool {
 	if len(chartFilter) == 0 {
 		return true

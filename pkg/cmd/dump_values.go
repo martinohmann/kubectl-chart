@@ -21,7 +21,16 @@ func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericcliop
 		Use:   "dump-values",
 		Short: "Dump merged values for a chart",
 		Long:  "This command dumps the merged values for the provided charts how they would be available in templates. This is useful for debugging.",
-		Args:  cobra.ExactArgs(0),
+		Example: `  # Dump values for a single chart
+  kubectl chart dump-values --chart-dir ~/charts/mychart
+
+  # Dump values for multiple charts with additional values merged
+  kubectl chart dump-values --chart-dir ~/charts --recursive --value-file ~/some/additional/values.yaml
+
+  # Dump values for multiple charts with filter
+  kubectl chart dump-values --chart-dir ~/charts --recursive --chart-filter mychart
+`,
+		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
 			cmdutil.CheckErr(o.Run())
@@ -36,7 +45,6 @@ func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericcliop
 type DumpValuesOptions struct {
 	genericclioptions.IOStreams
 	*ChartFlags
-	ChartDir string
 }
 
 func NewDumpValuesOptions(streams genericclioptions.IOStreams) *DumpValuesOptions {
@@ -108,7 +116,7 @@ func (o *DumpValuesOptions) Dump(chartName, chartDir string, additionalValues ma
 		return err
 	}
 
-	fmt.Fprintln(o.Out, "---")
+	fmt.Fprintf(o.Out, "---\n# Merged values for chart: %s\n---\n", chartName)
 
 	return yaml.NewEncoder(o.Out).Encode(values)
 }
