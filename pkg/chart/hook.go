@@ -309,7 +309,6 @@ func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
 	}
 
 	return e.Deleter.Delete(&deletions.Request{
-		DryRun:  e.DryRun,
 		Waiter:  e.Waiter,
 		Visitor: result,
 	})

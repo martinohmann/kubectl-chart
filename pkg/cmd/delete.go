@@ -5,6 +5,8 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/hooks"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
@@ -29,6 +31,7 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	}
 
 	o.ChartFlags.AddFlags(cmd)
+	o.HookFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
 	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, all resources matching the chart selector will be pruned, even those previously removed from the chart.")
@@ -42,13 +45,14 @@ type DeleteOptions struct {
 	DryRun     bool
 	Prune      bool
 	ChartFlags *ChartFlags
+	HookFlags  *HookFlags
 
 	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
 	Mapper         meta.RESTMapper
 	Serializer     chart.Serializer
 	Visitor        *chart.Visitor
-	HookExecutor   *chart.HookExecutor
+	HookExecutor   hooks.Executor
 	Deleter        deletions.Deleter
 	Waiter         wait.Waiter
 
@@ -60,6 +64,7 @@ func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 	return &DeleteOptions{
 		IOStreams:  streams,
 		ChartFlags: NewDefaultChartFlags(),
+		HookFlags:  NewDefaultHookFlags(),
 		Serializer: yaml.NewSerializer(),
 	}
 }
@@ -91,16 +96,20 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient)
+	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun)
 
-	o.HookExecutor = &chart.HookExecutor{
-		IOStreams:      o.IOStreams,
-		DryRun:         o.DryRun,
-		DynamicClient:  o.DynamicClient,
-		Mapper:         o.Mapper,
-		BuilderFactory: o.BuilderFactory,
-		Waiter:         o.Waiter,
-		Deleter:        o.Deleter,
+	if o.HookFlags.NoHooks {
+		o.HookExecutor = &hooks.NoopExecutor{}
+	} else {
+		o.HookExecutor = &chart.HookExecutor{
+			IOStreams:      o.IOStreams,
+			DryRun:         o.DryRun,
+			DynamicClient:  o.DynamicClient,
+			Mapper:         o.Mapper,
+			BuilderFactory: o.BuilderFactory,
+			Waiter:         o.Waiter,
+			Deleter:        o.Deleter,
+		}
 	}
 
 	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
@@ -149,7 +158,6 @@ func (o *DeleteOptions) Run() error {
 		}
 
 		err = o.Deleter.Delete(&deletions.Request{
-			DryRun:  o.DryRun,
 			Waiter:  o.Waiter,
 			Visitor: result,
 		})
@@ -157,6 +165,22 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		return o.HookExecutor.ExecHooks(c, chart.PostDeleteHook)
+		err = o.HookExecutor.ExecHooks(c, chart.PostDeleteHook)
+		if err != nil {
+			return err
+		}
+
+		pvcPruner := &chart.PVCPruner{
+			BuilderFactory: o.BuilderFactory,
+			Deleter:        o.Deleter,
+			Waiter:         o.Waiter,
+		}
+
+		v, err := resources.NewVisitorFromResourceInfoVisitor(result)
+		if err != nil {
+			return err
+		}
+
+		return pvcPruner.Prune(v)
 	})
 }

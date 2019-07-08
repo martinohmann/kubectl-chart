@@ -65,3 +65,15 @@ func (f *DiffFlags) ToPrinter() diff.Printer {
 		Context: f.Context,
 	})
 }
+
+type HookFlags struct {
+	NoHooks bool
+}
+
+func NewDefaultHookFlags() *HookFlags {
+	return &HookFlags{}
+}
+
+func (f *HookFlags) AddFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&f.NoHooks, "no-hooks", f.NoHooks, "If true, no hooks will be executed")
+}

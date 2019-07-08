@@ -21,9 +21,6 @@ type Request struct {
 	// Visitor will be used to walk the resources that should be deleted.
 	Visitor resource.Visitor
 
-	// DryRun if enabled, deletion is only simulated and printed.
-	DryRun bool
-
 	// Waiter if not nil, the waiter will be used to wait for object deletion.
 	Waiter wait.Waiter
 }
@@ -38,13 +35,17 @@ type Deleter interface {
 type deleter struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
+
+	// DryRun if enabled, deletion is only simulated and printed.
+	DryRun bool
 }
 
 // NewDeleter creates a new resource deleter.
-func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface) Deleter {
+func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, dryRun bool) Deleter {
 	return &deleter{
 		IOStreams:     streams,
 		DynamicClient: client,
+		DryRun:        dryRun,
 	}
 }
 
@@ -70,13 +71,13 @@ func (d *deleter) Delete(r *Request) error {
 		deletedInfos = append(deletedInfos, info)
 		found++
 
-		if r.DryRun {
+		if d.DryRun {
 			_, err := d.getResource(info)
 			if err != nil {
 				return err
 			}
 
-			d.PrintObj(info, true)
+			d.PrintObj(info)
 
 			return nil
 		}
@@ -86,7 +87,7 @@ func (d *deleter) Delete(r *Request) error {
 			return err
 		}
 
-		d.PrintObj(info, false)
+		d.PrintObj(info)
 
 		resourceLocation := wait.ResourceLocation{
 			GroupResource: info.Mapping.Resource.GroupResource(),
@@ -110,7 +111,7 @@ func (d *deleter) Delete(r *Request) error {
 		return err
 	}
 
-	if r.Waiter == nil || r.DryRun {
+	if r.Waiter == nil || d.DryRun {
 		return nil
 	}
 
@@ -150,7 +151,7 @@ func (d *deleter) deleteResource(info *resource.Info) error {
 
 // PrintObj prints out the object that was deleted (or would be deleted if dry
 // run is enabled).
-func (d *deleter) PrintObj(info *resource.Info, dryRun bool) {
+func (d *deleter) PrintObj(info *resource.Info) {
 	operation := "deleted"
 	groupKind := info.Mapping.GroupVersionKind
 	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
@@ -158,7 +159,7 @@ func (d *deleter) PrintObj(info *resource.Info, dryRun bool) {
 		kindString = strings.ToLower(groupKind.Kind)
 	}
 
-	if dryRun {
+	if d.DryRun {
 		operation = fmt.Sprintf("%s (dry run)", operation)
 	}
 
