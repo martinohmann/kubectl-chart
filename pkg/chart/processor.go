@@ -3,6 +3,8 @@ package chart
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Processor type processes a chart config and renders the contained resources.
@@ -61,7 +63,7 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 
 		resourceObjs, hookObjs, err := p.Parser.Parse([]byte(content))
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrapf(err, "while parsing template %q", name)
 		}
 
 		err = LabelStatefulSets(resourceObjs)
