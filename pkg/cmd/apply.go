@@ -8,17 +8,14 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/hooks"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
-	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	kprinters "k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
@@ -45,6 +42,7 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 	}
 
 	o.ChartFlags.AddFlags(cmd)
+	o.HookFlags.AddFlags(cmd)
 	o.DiffFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.ServerDryRun, "server-dry-run", o.ServerDryRun, "If true, request will be sent to server with dry-run flag, which means the modifications won't be persisted. This is an alpha feature and flag.")
@@ -62,6 +60,7 @@ type ApplyOptions struct {
 	Recorder     recorders.OperationRecorder
 	ShowDiff     bool
 	ChartFlags   *ChartFlags
+	HookFlags    *HookFlags
 	DiffFlags    *DiffFlags
 	DiffOptions  *DiffOptions
 
@@ -72,7 +71,7 @@ type ApplyOptions struct {
 	BuilderFactory  func() *resource.Builder
 	Serializer      chart.Serializer
 	Visitor         *chart.Visitor
-	HookExecutor    *chart.HookExecutor
+	HookExecutor    hooks.Executor
 	Waiter          wait.Waiter
 	Deleter         deletions.Deleter
 
@@ -85,6 +84,7 @@ func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 		IOStreams:  streams,
 		ChartFlags: NewDefaultChartFlags(),
 		DiffFlags:  NewDefaultDiffFlags(),
+		HookFlags:  NewDefaultHookFlags(),
 		Recorder:   recorders.NewOperationRecorder(),
 		Serializer: yaml.NewSerializer(),
 	}
@@ -141,16 +141,20 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient)
+	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun || o.ServerDryRun)
 
-	o.HookExecutor = &chart.HookExecutor{
-		IOStreams:      o.IOStreams,
-		DryRun:         o.DryRun || o.ServerDryRun,
-		DynamicClient:  o.DynamicClient,
-		Mapper:         o.Mapper,
-		BuilderFactory: o.BuilderFactory,
-		Waiter:         o.Waiter,
-		Deleter:        o.Deleter,
+	if o.HookFlags.NoHooks {
+		o.HookExecutor = &hooks.NoopExecutor{}
+	} else {
+		o.HookExecutor = &chart.HookExecutor{
+			IOStreams:      o.IOStreams,
+			DryRun:         o.DryRun || o.ServerDryRun,
+			DynamicClient:  o.DynamicClient,
+			Mapper:         o.Mapper,
+			BuilderFactory: o.BuilderFactory,
+			Waiter:         o.Waiter,
+			Deleter:        o.Deleter,
+		}
 	}
 
 	if !o.ShowDiff {
@@ -227,44 +231,13 @@ func (o *ApplyOptions) Run() error {
 		return err
 	}
 
-	return o.Recorder.Objects("pruned").Visit(func(obj runtime.Object, err error) error {
-		if err != nil {
-			return err
-		}
+	pvcPruner := &chart.PVCPruner{
+		BuilderFactory: o.BuilderFactory,
+		Deleter:        o.Deleter,
+		Waiter:         o.Waiter,
+	}
 
-		if !resources.IsOfKind(obj, resources.KindStatefulSet) {
-			return nil
-		}
-
-		policy, err := chart.GetDeletionPolicy(obj)
-		if err != nil || policy != chart.DeletionPolicyDeletePVCs {
-			return err
-		}
-
-		u, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			return errors.Errorf("illegal object type: %T", obj)
-		}
-
-		result := o.BuilderFactory().
-			Unstructured().
-			ContinueOnError().
-			NamespaceParam(u.GetNamespace()).DefaultNamespace().
-			ResourceTypeOrNameArgs(true, resources.KindPersistentVolumeClaim).
-			LabelSelector(chart.PersistentVolumeClaimSelector(u.GetName())).
-			Flatten().
-			Do().
-			IgnoreErrors(apierrors.IsNotFound)
-		if err := result.Err(); err != nil {
-			return err
-		}
-
-		return o.Deleter.Delete(&deletions.Request{
-			DryRun:  o.DryRun || o.ServerDryRun,
-			Waiter:  o.Waiter,
-			Visitor: result,
-		})
-	})
+	return pvcPruner.Prune(o.Recorder.Objects("pruned"))
 }
 
 func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.ApplyOptions {

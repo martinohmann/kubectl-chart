@@ -1,6 +1,10 @@
 package chart
 
 import (
+	"bytes"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
@@ -279,8 +285,6 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				if len(reqs) != 1 {
 					t.Fatal(spew.Sdump(reqs))
 				}
-
-				require.True(t, reqs[0].DryRun)
 			},
 			validateWaitRequests: func(t *testing.T, reqs []*wait.Request) {
 				if len(reqs) != 0 {
@@ -365,6 +369,38 @@ func fakeClient() resource.FakeClientFunc {
 	return func(version schema.GroupVersion) (resource.RESTClient, error) {
 		return &fake.RESTClient{}, nil
 	}
+}
+
+func fakeClientWith(testName string, t *testing.T, data map[string]string) resource.FakeClientFunc {
+	return func(version schema.GroupVersion) (resource.RESTClient, error) {
+		return &fake.RESTClient{
+			GroupVersion:         schema.GroupVersion{Group: "apps", Version: "v1"},
+			NegotiatedSerializer: serializer.DirectCodecFactory{CodecFactory: scheme.Codecs},
+			Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+				p := req.URL.Path
+				q := req.URL.RawQuery
+				if len(q) != 0 {
+					p = p + "?" + q
+				}
+
+				body, ok := data[p]
+				if !ok {
+					t.Fatalf("%s: unexpected request: %s (%s)\n%#v", testName, p, req.URL, req)
+				}
+				header := http.Header{}
+				header.Set("Content-Type", runtime.ContentTypeJSON)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     header,
+					Body:       stringBody(body),
+				}, nil
+			}),
+		}, nil
+	}
+}
+
+func stringBody(body string) io.ReadCloser {
+	return ioutil.NopCloser(bytes.NewReader([]byte(body)))
 }
 
 func newDefaultBuilder() *resource.Builder {

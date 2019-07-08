@@ -139,11 +139,11 @@ func TestDeleter_Delete(t *testing.T) {
 			d := NewDeleter(
 				genericclioptions.NewTestIOStreamsDiscard(),
 				fakeClient,
+				test.dryRun,
 			)
 
 			req := &Request{
 				Visitor: resource.InfoListVisitor(test.infos),
-				DryRun:  test.dryRun,
 			}
 
 			err := d.Delete(req)

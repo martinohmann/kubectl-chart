@@ -36,7 +36,9 @@ func LabelStatefulSets(objs []runtime.Object) error {
 			return errors.Errorf("illegal object type: %T", obj)
 		}
 
-		if !resources.IsOfKind(obj, resources.KindStatefulSet) {
+		gvk := obj.GetObjectKind().GroupVersionKind()
+
+		if gvk.Kind != resources.KindStatefulSet {
 			continue
 		}
 
