@@ -1,8 +1,6 @@
 package deletions
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
@@ -148,21 +146,4 @@ func (d *deleter) deleteResource(info *resource.Info) error {
 		Delete(info.Name, &metav1.DeleteOptions{
 			PropagationPolicy: &policy,
 		})
-}
-
-// PrintObj prints out the object that was deleted (or would be deleted if dry
-// run is enabled).
-func (d *deleter) PrintObj(info *resource.Info) {
-	operation := "deleted"
-	groupKind := info.Mapping.GroupVersionKind
-	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
-	if len(groupKind.Group) == 0 {
-		kindString = strings.ToLower(groupKind.Kind)
-	}
-
-	if d.DryRun {
-		operation = fmt.Sprintf("%s (dry run)", operation)
-	}
-
-	fmt.Fprintf(d.Out, "%s/%s %s\n", kindString, info.Name, operation)
 }
