@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -35,6 +36,7 @@ type Deleter interface {
 type deleter struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
+	Printer       printers.ResourcePrinter
 
 	// DryRun if enabled, deletion is only simulated and printed.
 	DryRun bool
@@ -46,6 +48,7 @@ func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, d
 		IOStreams:     streams,
 		DynamicClient: client,
 		DryRun:        dryRun,
+		Printer:       printers.NewNamePrinter("deleted", dryRun),
 	}
 }
 
@@ -77,9 +80,7 @@ func (d *deleter) Delete(r *Request) error {
 				return err
 			}
 
-			d.PrintObj(info)
-
-			return nil
+			return d.Printer.PrintObj(info.Object, d.Out)
 		}
 
 		err = d.deleteResource(info)
@@ -87,7 +88,7 @@ func (d *deleter) Delete(r *Request) error {
 			return err
 		}
 
-		d.PrintObj(info)
+		d.Printer.PrintObj(info.Object, d.Out)
 
 		resourceLocation := wait.ResourceLocation{
 			GroupResource: info.Mapping.Resource.GroupResource(),

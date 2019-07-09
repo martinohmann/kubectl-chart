@@ -16,7 +16,13 @@ func NewVersionCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewVersionOptions(streams)
 
 	cmd := &cobra.Command{
-		Use: "version",
+		Use:   "version",
+		Short: "Displays the version of kubectl-chart",
+		Example: `  # Short version
+  kubectl chart version --short
+
+  # YAML Output format
+  kubectl chart version --output yaml`,
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
@@ -30,10 +36,10 @@ func NewVersionCmd(streams genericclioptions.IOStreams) *cobra.Command {
 }
 
 type VersionOptions struct {
+	genericclioptions.IOStreams
+
 	Short  bool
 	Output string
-
-	genericclioptions.IOStreams
 }
 
 func NewVersionOptions(streams genericclioptions.IOStreams) *VersionOptions {

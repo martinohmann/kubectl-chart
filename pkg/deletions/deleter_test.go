@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -136,11 +137,12 @@ func TestDeleter_Delete(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := test.fakeClient()
 
-			d := NewDeleter(
-				genericclioptions.NewTestIOStreamsDiscard(),
-				fakeClient,
-				test.dryRun,
-			)
+			d := &deleter{
+				IOStreams:     genericclioptions.NewTestIOStreamsDiscard(),
+				DynamicClient: fakeClient,
+				Printer:       printers.NewDiscardingPrinter(),
+				DryRun:        test.dryRun,
+			}
 
 			req := &Request{
 				Visitor: resource.InfoListVisitor(test.infos),
