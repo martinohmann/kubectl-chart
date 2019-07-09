@@ -134,6 +134,8 @@ func (o *DeleteOptions) Run() error {
 				ResourceTypeOrNameArgs(true, "all").
 				LabelSelector(c.LabelSelector())
 		} else {
+			chart.SortResources(c.Resources, chart.DeleteOrder)
+
 			buf, err := o.Serializer.Encode(c.Resources.GetObjects())
 			if err != nil {
 				return err
