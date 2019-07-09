@@ -15,10 +15,6 @@ type ChartFlags struct {
 	ValueFiles  []string
 }
 
-func NewDefaultChartFlags() *ChartFlags {
-	return &ChartFlags{}
-}
-
 func (f *ChartFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.ChartDir, "chart-dir", f.ChartDir, "Directory of the helm chart that should be rendered. If not set the current directory is assumed")
 	cmd.Flags().StringSliceVar(&f.ChartFilter, "chart-filter", f.ChartFilter, "If set only render filtered charts")
@@ -48,8 +44,8 @@ type DiffFlags struct {
 	Context int
 }
 
-func NewDefaultDiffFlags() *DiffFlags {
-	return &DiffFlags{
+func NewDefaultDiffFlags() DiffFlags {
+	return DiffFlags{
 		Context: 10,
 	}
 }
@@ -68,10 +64,6 @@ func (f *DiffFlags) ToPrinter() diff.Printer {
 
 type HookFlags struct {
 	NoHooks bool
-}
-
-func NewDefaultHookFlags() *HookFlags {
-	return &HookFlags{}
 }
 
 func (f *HookFlags) AddFlags(cmd *cobra.Command) {

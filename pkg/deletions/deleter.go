@@ -1,10 +1,9 @@
 package deletions
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
+	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -35,6 +34,7 @@ type Deleter interface {
 type deleter struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
+	Printer       printers.ResourcePrinter
 
 	// DryRun if enabled, deletion is only simulated and printed.
 	DryRun bool
@@ -46,6 +46,7 @@ func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, d
 		IOStreams:     streams,
 		DynamicClient: client,
 		DryRun:        dryRun,
+		Printer:       printers.NewNamePrinter("deleted", dryRun),
 	}
 }
 
@@ -77,9 +78,7 @@ func (d *deleter) Delete(r *Request) error {
 				return err
 			}
 
-			d.PrintObj(info)
-
-			return nil
+			return d.Printer.PrintObj(info.Object, d.Out)
 		}
 
 		err = d.deleteResource(info)
@@ -87,7 +86,7 @@ func (d *deleter) Delete(r *Request) error {
 			return err
 		}
 
-		d.PrintObj(info)
+		d.Printer.PrintObj(info.Object, d.Out)
 
 		resourceLocation := wait.ResourceLocation{
 			GroupResource: info.Mapping.Resource.GroupResource(),
@@ -147,21 +146,4 @@ func (d *deleter) deleteResource(info *resource.Info) error {
 		Delete(info.Name, &metav1.DeleteOptions{
 			PropagationPolicy: &policy,
 		})
-}
-
-// PrintObj prints out the object that was deleted (or would be deleted if dry
-// run is enabled).
-func (d *deleter) PrintObj(info *resource.Info) {
-	operation := "deleted"
-	groupKind := info.Mapping.GroupVersionKind
-	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
-	if len(groupKind.Group) == 0 {
-		kindString = strings.ToLower(groupKind.Kind)
-	}
-
-	if d.DryRun {
-		operation = fmt.Sprintf("%s (dry run)", operation)
-	}
-
-	fmt.Fprintf(d.Out, "%s/%s %s\n", kindString, info.Name, operation)
 }

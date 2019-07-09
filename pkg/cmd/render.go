@@ -15,7 +15,20 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	o := NewRenderOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:  "render",
+		Use:   "render",
+		Short: "Render resources from one or multiple helm charts",
+		Long:  "Renders resources of one or multiple helm charts. This can be used to preview the manifests that are sent to the cluster.",
+		Example: `  # Render a single chart
+  kubectl chart render --chart-dir ~/charts/mychart
+
+  # Render multiple charts
+  kubectl chart render --chart-dir ~/charts --recursive
+
+  # Render chart hooks
+  kubectl chart render --chart-dir ~/charts/mychart --hook pre-apply
+
+  # Render all chart hooks
+  kubectl chart render --chart-dir ~/charts --recursive --hook all`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
@@ -33,9 +46,9 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 type RenderOptions struct {
 	genericclioptions.IOStreams
-	ChartFlags *ChartFlags
 
-	HookType string
+	ChartFlags ChartFlags
+	HookType   string
 
 	Serializer chart.Serializer
 	Visitor    *chart.Visitor
@@ -44,7 +57,6 @@ type RenderOptions struct {
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 	return &RenderOptions{
 		IOStreams:  streams,
-		ChartFlags: &ChartFlags{},
 		Serializer: yaml.NewSerializer(),
 	}
 }

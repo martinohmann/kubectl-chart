@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/pkg/errors"
@@ -225,7 +226,7 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 	resourceOptions := make(wait.ResourceOptions)
 
 	err = hooks.EachItem(func(hook *Hook) error {
-		e.PrintHook(hook, "triggered")
+		e.PrintHook(hook)
 
 		if e.DryRun {
 			return nil
@@ -338,25 +339,14 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 }
 
 // PrintHook prints a hooks.
-func (e *HookExecutor) PrintHook(hook *Hook, operation string) {
-	groupKind := hook.GroupVersionKind()
-	kindString := fmt.Sprintf("%s.%s", strings.ToLower(groupKind.Kind), groupKind.Group)
-	if len(groupKind.Group) == 0 {
-		kindString = strings.ToLower(groupKind.Kind)
-	}
+func (e *HookExecutor) PrintHook(hook *Hook) error {
+	operation := "triggered"
 
-	if timeout, err := hook.WaitTimeout(); err != nil {
-		// In case the timeout fails to parse, we just log the error and use
-		// default
-		klog.V(1).Info(err)
-		return
-	} else if timeout > 0 {
+	if timeout, _ := hook.WaitTimeout(); timeout > 0 {
 		operation = fmt.Sprintf("%s (timeout %s)", operation, timeout)
 	}
 
-	if e.DryRun {
-		operation = fmt.Sprintf("%s (dry run)", operation)
-	}
+	p := printers.NewNamePrinter(operation, e.DryRun)
 
-	fmt.Fprintf(e.Out, "hook %s/%s %s\n", kindString, hook.GetName(), operation)
+	return p.PrintObj(hook, e.Out)
 }

@@ -32,7 +32,23 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 	o := NewApplyOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:  "apply",
+		Use:   "apply",
+		Short: "Apply resources from one or multiple helm charts",
+		Long:  "Apply renders the resources of one or multiple helm charts and applies them to a cluster.",
+		Example: `  # Render and apply a single chart
+  kubectl chart apply --chart-dir ~/charts/mychart
+
+  # Render and apply multiple charts with additional values merged
+  kubectl chart apply --chart-dir ~/charts --recursive --value-file ~/some/additional/values.yaml
+
+  # Dry run apply and print resource diffs
+  kubectl chart apply --chart-dir ~/charts/mychart --diff --server-dry-run
+
+  # Render and apply multiple charts with a chart filter
+  kubectl chart apply --chart-dir ~/charts --recursive --chart-filter mychart
+
+  # Skip executing pre and post-apply hooks
+  kubectl chart apply --chart-dir ~/charts/mychart --no-hooks`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
@@ -55,15 +71,15 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 type ApplyOptions struct {
 	genericclioptions.IOStreams
 
+	ChartFlags   ChartFlags
+	HookFlags    HookFlags
+	DiffFlags    DiffFlags
+	DiffOptions  *DiffOptions
 	DryRun       bool
 	ServerDryRun bool
-	Recorder     recorders.OperationRecorder
 	ShowDiff     bool
-	ChartFlags   *ChartFlags
-	HookFlags    *HookFlags
-	DiffFlags    *DiffFlags
-	DiffOptions  *DiffOptions
 
+	Recorder        recorders.OperationRecorder
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
 	OpenAPISchema   openapi.Resources
@@ -82,9 +98,7 @@ type ApplyOptions struct {
 func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 	return &ApplyOptions{
 		IOStreams:  streams,
-		ChartFlags: NewDefaultChartFlags(),
 		DiffFlags:  NewDefaultDiffFlags(),
-		HookFlags:  NewDefaultHookFlags(),
 		Recorder:   recorders.NewOperationRecorder(),
 		Serializer: yaml.NewSerializer(),
 	}

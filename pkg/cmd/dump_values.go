@@ -43,13 +43,12 @@ func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericcliop
 
 type DumpValuesOptions struct {
 	genericclioptions.IOStreams
-	*ChartFlags
+	ChartFlags
 }
 
 func NewDumpValuesOptions(streams genericclioptions.IOStreams) *DumpValuesOptions {
 	return &DumpValuesOptions{
-		IOStreams:  streams,
-		ChartFlags: NewDefaultChartFlags(),
+		IOStreams: streams,
 	}
 }
 

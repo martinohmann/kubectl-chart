@@ -23,7 +23,14 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 	o := NewDiffOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:  "diff",
+		Use:   "diff",
+		Short: "Diff resources from one or multiple helm charts",
+		Long:  "Diffs resources of one or multiple helm charts against the live objects in the cluster.",
+		Example: `  # Diff a single chart
+  kubectl chart diff --chart-dir ~/charts/mychart
+
+  # Diff multiple charts with custom diff context
+  kubectl chart diff --chart-dir ~/charts --recursive --diff-context 20`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
@@ -40,8 +47,8 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 type DiffOptions struct {
 	genericclioptions.IOStreams
 
-	ChartFlags *ChartFlags
-	DiffFlags  *DiffFlags
+	ChartFlags ChartFlags
+	DiffFlags  DiffFlags
 
 	OpenAPISchema  openapi.Resources
 	DryRunVerifier *apply.DryRunVerifier
@@ -56,7 +63,6 @@ type DiffOptions struct {
 func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 	return &DiffOptions{
 		IOStreams:  streams,
-		ChartFlags: NewDefaultChartFlags(),
 		DiffFlags:  NewDefaultDiffFlags(),
 		Serializer: yaml.NewSerializer(),
 	}
