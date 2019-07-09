@@ -98,5 +98,7 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 		}
 	}
 
+	SortResources(resourceList, ApplyOrder)
+
 	return resourceList, hookMap, nil
 }
