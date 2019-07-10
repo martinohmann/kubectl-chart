@@ -2,6 +2,7 @@ kubectl-chart
 =============
 
 [![Build Status](https://travis-ci.org/martinohmann/kubectl-chart.svg?branch=master)](https://travis-ci.org/martinohmann/kubectl-chart)
+[![codecov](https://codecov.io/gh/martinohmann/kubectl-chart/branch/master/graph/badge.svg)](https://codecov.io/gh/martinohmann/kubectl-chart)
 [![Go Report Card](https://goreportcard.com/badge/github.com/martinohmann/kubectl-chart?style=flat)](https://goreportcard.com/report/github.com/martinohmann/kubectl-chart)
 [![GoDoc](https://godoc.org/github.com/martinohmann/kubectl-chart?status.svg)](https://godoc.org/github.com/martinohmann/kubectl-chart)
 
@@ -9,7 +10,7 @@ A `kubectl` plugin to ease management of cluster components using helm charts.
 Minimum required Kubernetes version currently is 1.13 for `kubectl-chart` to
 work.
 
-**This is still heavily WIP and will likely change a lot, so do not use in
+**This is still WIP and will likely change a lot, so do not use in
 production.**
 
 More documentation for code and usage will be added soon. Code is a little
@@ -40,13 +41,16 @@ Features
 - Dry-run for chart deletions
 - Diffs for deleted chart resources
 - Resource diffs for all charts while dry-run and apply
+- Simple chart lifecycle hooks (similar to helm hooks)
+- Configurable pruning of PVC of deleted StatefulSets
+- Dumping of merged chart values for debugging
 
 Planned features
 ----------------
 
-- Simple chart lifecycle hooks (like helm, WIP)
-- Configurable pruning of PVC of deleted StatefulSets (TODO)
-- Listing all deployed resources of a chart (similar to `kubectl get all` with filter, TODO)
+- Listing all deployed resources of a chart (similar to `kubectl get all` with filter)
+- Color indicators for printed resource operations
+- Optional rollback of partially applied changes on failure
 
 Installation
 ------------
