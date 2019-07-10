@@ -27,25 +27,10 @@ func NewVisitor(objs []runtime.Object) Visitor {
 	}
 }
 
-// NewVisitorFromResourceInfoVisitor creates a new Visitor from a resource.Visitor
-func NewVisitorFromResourceInfoVisitor(visitor resource.Visitor) (Visitor, error) {
-	objs := make([]runtime.Object, 0)
-
-	err := visitor.Visit(func(info *resource.Info, err error) error {
-		if err != nil || info.Object == nil {
-			return err
-		}
-
-		objs = append(objs, info.Object)
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return NewVisitor(objs), nil
+// NewInfoListVisitor creates a new Visitor that visits all runtime objects
+// contained in the info list.
+func NewInfoListVisitor(infos []*resource.Info) Visitor {
+	return NewVisitor(ToObjectList(infos))
 }
 
 // Visit implements Visitor.
@@ -90,4 +75,15 @@ func (v *StatefulSetVisitor) Visit(fn VisitorFunc) error {
 
 		return fn(obj, nil)
 	})
+}
+
+// ToObjectList converts given info list to a slice of runtime objects.
+func ToObjectList(infos []*resource.Info) []runtime.Object {
+	objs := make([]runtime.Object, len(infos))
+
+	for i, info := range infos {
+		objs[i] = info.Object
+	}
+
+	return objs
 }
