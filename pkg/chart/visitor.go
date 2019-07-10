@@ -158,16 +158,7 @@ func (v *ReverseVisitor) Visit(fn VisitorFunc) error {
 	})
 
 	for i := len(charts) - 1; i >= 0; i-- {
-		if err != nil {
-			if fnErr := fn(charts[i], err); fnErr != nil {
-				return fnErr
-			}
-			continue
-		}
-
-		if err := fn(charts[i], nil); err != nil {
-			return err
-		}
+		err = fn(charts[i], err)
 	}
 
 	return err
