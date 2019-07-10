@@ -31,30 +31,43 @@ const (
 )
 
 var (
+	// DefaultHookWaitTimeout is the timeout that is used for wait operations
+	// if it is not overridden in a hooks configuration.
 	DefaultHookWaitTimeout = 2 * time.Hour
 
-	ValidHooks             = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
+	// ValidHookTypes contains a list of supported hook types.
+	ValidHookTypes = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
+
+	// ValidHookResourceKinds contains a list of resources that can be used as hooks.
 	ValidHookResourceKinds = []string{resources.KindJob}
 )
 
+// Hook is a chart hook that gets executed before or after apply/delete
+// depending on its type.
 type Hook struct {
 	*Resource
 }
 
+// NewHook creates a new hook from a runtime object.
 func NewHook(obj runtime.Object) *Hook {
 	return &Hook{
 		Resource: NewResource(obj),
 	}
 }
 
+// RestartPolicy gets the restartPolicy from the hook jobs pod spec.
 func (h *Hook) RestartPolicy() string {
 	return h.nestedString("spec", "template", "spec", "restartPolicy")
 }
 
+// Type returns the hook type, e.g. post-apply.
 func (h *Hook) Type() string {
 	return h.nestedString("metadata", "annotations", AnnotationHookType)
 }
 
+// AllowFailure indicates whether the hook is allowed to fail or not. If true,
+// hook errors are only printed and execution continues. If this is true,
+// NoWait() must not return true as well.
 func (h *Hook) AllowFailure() bool {
 	value := h.nestedString("metadata", "annotations", AnnotationHookAllowFailure)
 	b, err := strconv.ParseBool(value)
@@ -65,6 +78,21 @@ func (h *Hook) AllowFailure() bool {
 	return b
 }
 
+// NoWait indicates whether it should be waited for the hook to complete or
+// not. If true, AllowFailure() must not return true and it is also not
+// possible to detect possible hook failures.
+func (h *Hook) NoWait() bool {
+	value := h.nestedString("metadata", "annotations", AnnotationHookNoWait)
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+
+	return b
+}
+
+// WaitTimeout returns the timeout for waiting for hook completion and an error
+// if the annotation cannot be parsed.
 func (h *Hook) WaitTimeout() (time.Duration, error) {
 	value, found, _ := unstructured.NestedString(h.Object, "metadata", "annotations", AnnotationHookWaitTimeout)
 	if !found {
@@ -73,7 +101,7 @@ func (h *Hook) WaitTimeout() (time.Duration, error) {
 
 	timeout, err := time.ParseDuration(value)
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to parse annotation %q: %s", AnnotationHookWaitTimeout, timeout)
+		return 0, err
 	}
 
 	return timeout, nil
@@ -117,7 +145,7 @@ func (l HookList) EachItem(fn func(*Hook) error) error {
 }
 
 func IsValidHookType(typ string) bool {
-	for _, t := range ValidHooks {
+	for _, t := range ValidHookTypes {
 		if t == typ {
 			return true
 		}
@@ -155,7 +183,7 @@ func (e HookTypeError) Error() string {
 	msg := fmt.Sprintf(
 		"invalid hook type %q, allowed values are \"%s\"",
 		e.Type,
-		strings.Join(ValidHooks, `", "`),
+		strings.Join(ValidHookTypes, `", "`),
 	)
 
 	if len(e.Additional) > 0 {
@@ -192,7 +220,20 @@ func ValidateHook(h *Hook) error {
 		return errors.Errorf("invalid hook %q: restartPolicy of the pod template must be %q", h.GetName(), "Never")
 	}
 
-	return nil
+	if h.NoWait() && h.AllowFailure() {
+		return errors.Errorf("invalid hook %q: %s and %s cannot be true at the same time", h.GetName(), AnnotationHookNoWait, AnnotationHookAllowFailure)
+	}
+
+	timeout, err := h.WaitTimeout()
+	if err != nil {
+		return errors.Wrapf(err, "invalid hook %q: malformed %s annotation", h.GetName(), AnnotationHookWaitTimeout)
+	}
+
+	if h.NoWait() && timeout > 0 {
+		return errors.Errorf("invalid hook %q: %s and %s cannot be set at the same time", h.GetName(), AnnotationHookNoWait, AnnotationHookWaitTimeout)
+	}
+
+	return err
 }
 
 // HookExecutor executes chart lifecycle hooks.
@@ -253,6 +294,10 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 			return err
 		}
 
+		if hook.NoWait() {
+			return nil
+		}
+
 		info := &resource.Info{
 			Mapping:         mapping,
 			Namespace:       obj.GetNamespace(),
@@ -279,8 +324,8 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 			Timeout:      DefaultHookWaitTimeout,
 		}
 
-		timeout, err := hook.WaitTimeout()
-		if err == nil && timeout > 0 {
+		timeout, _ := hook.WaitTimeout()
+		if timeout > 0 {
 			options.Timeout = timeout
 		}
 
@@ -342,8 +387,22 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 func (e *HookExecutor) PrintHook(hook *Hook) error {
 	operation := "triggered"
 
+	options := make([]string, 0)
+
 	if timeout, _ := hook.WaitTimeout(); timeout > 0 {
-		operation = fmt.Sprintf("%s (timeout %s)", operation, timeout)
+		options = append(options, fmt.Sprintf("timeout %s", timeout))
+	}
+
+	if hook.NoWait() {
+		options = append(options, "no-wait")
+	}
+
+	if hook.AllowFailure() {
+		options = append(options, "allow-failure")
+	}
+
+	if len(options) > 0 {
+		operation = fmt.Sprintf("%s (%s)", operation, strings.Join(options, ","))
 	}
 
 	p := printers.NewNamePrinter(operation, e.DryRun)
