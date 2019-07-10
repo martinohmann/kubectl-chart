@@ -64,7 +64,7 @@ type DeleteOptions struct {
 	BuilderFactory func() *resource.Builder
 	Mapper         meta.RESTMapper
 	Serializer     chart.Serializer
-	Visitor        *chart.Visitor
+	Visitor        chart.Visitor
 	HookExecutor   hooks.Executor
 	Deleter        deletions.Deleter
 	Waiter         wait.Waiter
@@ -123,7 +123,12 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		}
 	}
 
-	o.Visitor, err = o.ChartFlags.ToVisitor(o.Namespace)
+	visitor, err := o.ChartFlags.ToVisitor(o.Namespace)
+	if err != nil {
+		return err
+	}
+
+	o.Visitor = chart.NewReverseVisitor(visitor)
 
 	return err
 }

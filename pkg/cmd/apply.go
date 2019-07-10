@@ -86,7 +86,7 @@ type ApplyOptions struct {
 	Mapper          meta.RESTMapper
 	BuilderFactory  func() *resource.Builder
 	Serializer      chart.Serializer
-	Visitor         *chart.Visitor
+	Visitor         chart.Visitor
 	HookExecutor    hooks.Executor
 	Waiter          wait.Waiter
 	Deleter         deletions.Deleter
