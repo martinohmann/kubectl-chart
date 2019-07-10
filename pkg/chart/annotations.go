@@ -8,6 +8,7 @@ import (
 const (
 	AnnotationHookType         = "kubectl-chart/hook-type"
 	AnnotationHookAllowFailure = "kubectl-chart/hook-allow-failure"
+	AnnotationHookNoWait       = "kubectl-chart/hook-no-wait"
 	AnnotationHookWaitTimeout  = "kubectl-chart/hook-wait-timeout"
 	AnnotationDeletionPolicy   = "kubectl-chart/deletion-policy"
 

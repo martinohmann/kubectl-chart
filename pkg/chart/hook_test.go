@@ -111,6 +111,66 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			},
 		},
 		{
+			name: "don't wait if hook has no-wait annotation",
+			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
+				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
+			},
+			hookType: PreApplyHook,
+			hooks: HookMap{
+				PreApplyHook: HookList{
+					NewHook(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									AnnotationHookType:   PostApplyHook,
+									AnnotationHookNoWait: "true",
+								},
+								"labels": map[string]interface{}{
+									LabelHookChartName: "foochart",
+									LabelHookType:      PreApplyHook,
+								},
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
+									},
+								},
+							},
+						},
+					}),
+				},
+			},
+			validateActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Fatal(spew.Sdump(actions))
+				}
+				if !actions[0].Matches("create", "jobs") {
+					t.Error(spew.Sdump(actions))
+				}
+
+				obj := actions[0].(clienttesting.CreateAction).GetObject()
+
+				metadata, err := meta.Accessor(obj)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if metadata.GetName() != "somehook" {
+					t.Fatalf("expected hook %q, got %q", "somehook", metadata.GetName())
+				}
+			},
+			validateWaitRequests: func(t *testing.T, reqs []*wait.Request) {
+				if len(reqs) != 0 {
+					t.Fatal(spew.Sdump(reqs))
+				}
+			},
+		},
+		{
 			name: "execute one hook with custom options",
 			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
