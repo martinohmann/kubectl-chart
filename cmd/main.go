@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"os"
 
 	"github.com/martinohmann/kubectl-chart/pkg/cmd"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/klog"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -19,6 +22,13 @@ var (
 	}
 )
 
+func init() {
+	klog.InitFlags(flag.CommandLine)
+	flag.Set("logtostderr", "true")
+
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+}
+
 func main() {
 	streams := genericclioptions.IOStreams{
 		In:     os.Stdin,
@@ -29,6 +39,8 @@ func main() {
 	configFlags := genericclioptions.NewConfigFlags(true)
 
 	configFlags.AddFlags(rootCmd.PersistentFlags())
+
+	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
 	rootCmd.AddCommand(cmd.NewApplyCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewDeleteCmd(configFlags, streams))
