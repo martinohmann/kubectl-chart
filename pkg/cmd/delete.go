@@ -165,6 +165,11 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
+		infos, err := result.Infos()
+		if err != nil {
+			return err
+		}
+
 		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
 		if err != nil {
 			return err
@@ -172,7 +177,7 @@ func (o *DeleteOptions) Run() error {
 
 		err = o.Deleter.Delete(&deletions.Request{
 			Waiter:  o.Waiter,
-			Visitor: result,
+			Visitor: resource.InfoListVisitor(infos),
 		})
 		if err != nil {
 			return err
@@ -189,11 +194,8 @@ func (o *DeleteOptions) Run() error {
 			Waiter:         o.Waiter,
 		}
 
-		v, err := resources.NewVisitorFromResourceInfoVisitor(result)
-		if err != nil {
-			return err
-		}
+		visitor := resources.NewInfoListVisitor(infos)
 
-		return pvcPruner.Prune(v)
+		return pvcPruner.Prune(visitor)
 	})
 }
