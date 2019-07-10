@@ -198,6 +198,13 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
+		objs := c.Resources.GetObjects()
+
+		if len(objs) == 0 {
+			// we bail out early if there are no objects to apply.
+			return nil
+		}
+
 		if o.ShowDiff {
 			err = o.DiffOptions.Diff(c)
 			if err != nil {
@@ -205,7 +212,7 @@ func (o *ApplyOptions) Run() error {
 			}
 		}
 
-		buf, err := o.Serializer.Encode(c.Resources.GetObjects())
+		buf, err := o.Serializer.Encode(objs)
 		if err != nil {
 			return err
 		}
