@@ -95,3 +95,27 @@ func TestVisitor_VisitChartFilter(t *testing.T) {
 	assert.Equal(t, 1, tv.seenResources["chart2"])
 	assert.Equal(t, 0, tv.seenHooks["chart2"])
 }
+
+func TestReverseVisitor_Visit(t *testing.T) {
+	opts := VisitorOptions{
+		ChartDir:  "testdata",
+		Namespace: "default",
+		Recursive: true,
+	}
+
+	v := NewReverseVisitor(NewVisitor(NewDefaultProcessor(), opts))
+
+	seenCharts := make([]string, 0)
+
+	err := v.Visit(func(c *Chart, err error) error {
+		require.NoError(t, err)
+
+		seenCharts = append(seenCharts, c.Config.Name)
+
+		return nil
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"chart2", "chart1"}, seenCharts)
+}

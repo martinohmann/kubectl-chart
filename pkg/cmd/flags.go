@@ -22,7 +22,7 @@ func (f *ChartFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringArrayVar(&f.ValueFiles, "value-file", f.ValueFiles, "File that should be merged onto the chart values before rendering")
 }
 
-func (f *ChartFlags) ToVisitor(namespace string) (*chart.Visitor, error) {
+func (f *ChartFlags) ToVisitor(namespace string) (chart.Visitor, error) {
 	chartDir, err := filepath.Abs(f.ChartDir)
 	if err != nil {
 		return nil, err

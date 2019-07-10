@@ -55,7 +55,7 @@ type DiffOptions struct {
 	BuilderFactory func() *resource.Builder
 	DiffPrinter    diff.Printer
 	Serializer     chart.Serializer
-	Visitor        *chart.Visitor
+	Visitor        chart.Visitor
 
 	Namespace string
 }

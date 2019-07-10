@@ -20,25 +20,31 @@ type VisitorOptions struct {
 // that is encountered by the visitor.
 type VisitorFunc func(chart *Chart, err error) error
 
+// Visitor is a type that visits charts.
+type Visitor interface {
+	// Visit accepts a function that is called for every chart the visitor
+	// encounters.
+	Visit(fn VisitorFunc) error
+}
+
 // Visitor is a chart visitor.
-type Visitor struct {
+type visitor struct {
 	Processor *Processor
 	Options   VisitorOptions
 }
 
 // NewVisitor creates a new *Visitor which uses given *Processor and
 // VisitorOptions to process charts.
-func NewVisitor(p *Processor, o VisitorOptions) *Visitor {
-	return &Visitor{
+func NewVisitor(p *Processor, o VisitorOptions) Visitor {
+	return &visitor{
 		Processor: p,
 		Options:   o,
 	}
 }
 
-// Visit accepts a function that is called for every chart the visitor
-// encounters. The visitor will use a chart processor to process every chart
-// before passing the chart config, resources and hooks to fn.
-func (v *Visitor) Visit(fn VisitorFunc) error {
+// Visit implements Visitor. The visitor will use a chart processor to process
+// every chart before passing the chart config, resources and hooks to fn.
+func (v *visitor) Visit(fn VisitorFunc) error {
 	values, err := LoadValues(v.Options.ValueFiles...)
 	if err != nil {
 		return err
@@ -74,7 +80,7 @@ func (v *Visitor) Visit(fn VisitorFunc) error {
 	return err
 }
 
-func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Config, error) {
+func (v *visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Config, error) {
 	configs := make([]*Config, 0)
 
 	if v.Options.Recursive {
@@ -121,6 +127,48 @@ func (v *Visitor) buildChartConfigs(values map[interface{}]interface{}) ([]*Conf
 	return configs, nil
 }
 
-func (v *Visitor) includeChart(chartName string) bool {
+func (v *visitor) includeChart(chartName string) bool {
 	return Include(v.Options.ChartFilter, chartName)
+}
+
+// ReverseVisitor wraps a Visitor and visits all charts in the reverse order.
+type ReverseVisitor struct {
+	Visitor Visitor
+}
+
+// NewReverseVisitor creates a new *ReverseVisitor which wraps visitor.
+func NewReverseVisitor(visitor Visitor) *ReverseVisitor {
+	return &ReverseVisitor{
+		Visitor: visitor,
+	}
+}
+
+// Visit implements Visitor.
+func (v *ReverseVisitor) Visit(fn VisitorFunc) error {
+	charts := make([]*Chart, 0)
+
+	err := v.Visitor.Visit(func(c *Chart, err error) error {
+		if err != nil {
+			return err
+		}
+
+		charts = append(charts, c)
+
+		return nil
+	})
+
+	for i := len(charts) - 1; i >= 0; i-- {
+		if err != nil {
+			if fnErr := fn(charts[i], err); fnErr != nil {
+				return fnErr
+			}
+			continue
+		}
+
+		if err := fn(charts[i], nil); err != nil {
+			return err
+		}
+	}
+
+	return err
 }

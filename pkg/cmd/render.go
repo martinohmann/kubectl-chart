@@ -51,7 +51,7 @@ type RenderOptions struct {
 	HookType   string
 
 	Serializer chart.Serializer
-	Visitor    *chart.Visitor
+	Visitor    chart.Visitor
 }
 
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
