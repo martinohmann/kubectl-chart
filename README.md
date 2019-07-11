@@ -10,11 +10,9 @@ A `kubectl` plugin to ease management of cluster components using helm charts.
 Minimum required Kubernetes version currently is 1.13 for `kubectl-chart` to
 work.
 
-**This is still WIP and will likely change a lot, so do not use in
-production.**
+**This is still alpha quality and will likely change a lot, so be careful to use it in production. You have been warned.**
 
-More documentation for code and usage will be added soon. Code is a little
-messy in this early stage and subject for cleanup.
+More documentation for code and usage will be added soon.
 
 Why?
 ----
@@ -45,24 +43,46 @@ Features
 - Configurable pruning of PVC of deleted StatefulSets
 - Dumping of merged chart values for debugging
 
-Planned features
-----------------
+Roadmap / Planned features
+--------------------------
 
+- Full integration test coverage
 - Listing all deployed resources of a chart (similar to `kubectl get all` with filter)
-- Color indicators for printed resource operations
+- Color indicators for printed resource operations to increase visibility
 - Optional rollback of partially applied changes on failure
 
 Installation
 ------------
 
+After `kubectl-chart` is installed, it is available as a `kubectl` plugin under
+the command `kubectl chart`.
+
+### From source
+
 ```sh
-$ git clone https://github.com/martinohmann/kubectl-chart
-$ cd kubectl-chart
-$ make install
+git clone https://github.com/martinohmann/kubectl-chart
+cd kubectl-chart
+make install
+kubectl chart version
 ```
 
 This will install the `kubectl-chart` binary to `$GOPATH/bin/kubectl-chart`.
-After that, it is available as a `kubectl` plugin under the command `kubectl chart`.
+
+### From binary release
+
+Currently only Linux and MacOSX are packaged as binary releases.
+
+```
+curl -SsL -o kubectl-chart "https://github.com/martinohmann/kubectl-chart/releases/download/v0.0.1/kubectl-chart_0.0.1_$(uname -s | tr '[:upper:]' '[:lower:]')_x86_64"
+chmod +x kubectl-chart
+sudo mv kubectl-chart /usr/local/bin
+```
+
+You can verify the installation by printing the version:
+
+```
+kubectl chart version
+```
 
 Usage examples
 --------------
@@ -70,38 +90,51 @@ Usage examples
 Diff chart:
 
 ```
-$ kubectl chart diff --chart-dir path/to/chart
+kubectl chart diff --chart-dir path/to/chart
 ```
 
 Diff all charts in a directory:
 
 ```
-$ kubectl chart diff --chart-dir path/to/charts -R
+kubectl chart diff --chart-dir path/to/charts -R
 ```
 
 Dry run apply with chart value overrides:
 
 ```
-$ kubectl chart apply --chart-dir path/to/chart --server-dry-run --value-file path/to/values.yaml
+kubectl chart apply --chart-dir path/to/chart --server-dry-run --value-file path/to/values.yaml
 ```
 
 Dry run delete charts by filter:
 
 ```
-$ kubectl chart delete --chart-dir path/to/charts -R --chart-filter chart1,chart3 --dry-run
+kubectl chart delete --chart-dir path/to/charts -R --chart-filter chart1,chart3 --dry-run
 ```
 
 Render chart:
 
 ```
-$ kubectl chart render --chart-dir path/to/chart
+kubectl chart render --chart-dir path/to/chart
 ```
 
 Render chart hooks:
 
 ```
-$ kubectl chart render --chart-dir path/to/chart --hook all
+kubectl chart render --chart-dir path/to/chart --hook all
 ```
+
+How does it work?
+-----------------
+
+It is pretty simple. `kubectl-chart` adds a label to each chart resource it
+renders so it can identify resources belonging to a chart once they are
+deployed into a cluster. The label makes it possible to easily diff charts
+against the live objects and identify resources that were deleted from the
+chart but are still present in the cluster.
+
+Using the label `kubectl chart apply` internally runs logic equivalent to
+`kubectl apply --prune -l <chart-label-selector>` to transparently prune
+removed resources.
 
 License
 -------
