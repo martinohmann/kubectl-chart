@@ -5,6 +5,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/diff"
+	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/spf13/cobra"
 )
 
@@ -68,4 +69,16 @@ type HookFlags struct {
 
 func (f *HookFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&f.NoHooks, "no-hooks", f.NoHooks, "If true, no hooks will be executed")
+}
+
+type PrintFlags struct {
+	Color bool
+}
+
+func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&f.Color, "color", f.Color, "If true, resource operations will be printed in color based on the operation type")
+}
+
+func (f *PrintFlags) ToPrinter(dryRun bool) printers.OperationPrinter {
+	return printers.NewOperationPrinter(f.Color, dryRun)
 }

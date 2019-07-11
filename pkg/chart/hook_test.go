@@ -11,6 +11,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -403,6 +404,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				Waiter:        waiter,
 				Mapper:        testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme),
 				DynamicClient: fakeClient,
+				Printer:       printers.NewDiscardingOperationPrinter(),
 				DryRun:        tc.dryRun,
 			}
 

@@ -256,6 +256,7 @@ type HookExecutor struct {
 	Mapper        meta.RESTMapper
 	Deleter       deletions.Deleter
 	Waiter        wait.Waiter
+	Printer       printers.OperationPrinter
 	DryRun        bool
 }
 
@@ -412,7 +413,5 @@ func (e *HookExecutor) PrintHook(hook *Hook) error {
 		operation = fmt.Sprintf("%s (%s)", operation, strings.Join(options, ","))
 	}
 
-	p := printers.NewNamePrinter(operation, e.DryRun)
-
-	return p.PrintObj(hook, e.Out)
+	return e.Printer.WithOperation(operation).PrintObj(hook, e.Out)
 }

@@ -33,13 +33,13 @@ type deleter struct {
 }
 
 // NewDeleter creates a new resource deleter.
-func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, dryRun bool) Deleter {
+func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, printer printers.OperationPrinter, dryRun bool) Deleter {
 	return &deleter{
 		IOStreams:     streams,
 		DynamicClient: client,
 		DryRun:        dryRun,
 		Waiter:        wait.NewDefaultWaiter(streams),
-		Printer:       printers.NewNamePrinter("deleted", dryRun),
+		Printer:       printer.WithOperation("deleted"),
 	}
 }
 

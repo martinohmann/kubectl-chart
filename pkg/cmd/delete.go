@@ -45,6 +45,7 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 	o.ChartFlags.AddFlags(cmd)
 	o.HookFlags.AddFlags(cmd)
+	o.PrintFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
 	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, all resources matching the chart selector will be pruned, even those previously removed from the chart.")
@@ -57,6 +58,7 @@ type DeleteOptions struct {
 
 	ChartFlags ChartFlags
 	HookFlags  HookFlags
+	PrintFlags PrintFlags
 	DryRun     bool
 	Prune      bool
 
@@ -105,7 +107,9 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun)
+	p := o.PrintFlags.ToPrinter(o.DryRun)
+
+	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, p, o.DryRun)
 
 	if o.HookFlags.NoHooks {
 		o.HookExecutor = &hooks.NoopExecutor{}
@@ -117,6 +121,7 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 			Mapper:        o.Mapper,
 			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
 			Deleter:       o.Deleter,
+			Printer:       p,
 		}
 	}
 
