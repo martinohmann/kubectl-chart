@@ -49,6 +49,10 @@ func LabelStatefulSets(objs []runtime.Object) error {
 		spec.Selector.MatchLabels[LabelOwnedByStatefulSet] = statefulSet.GetName()
 		spec.Template.ObjectMeta.Labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
 
+		for i := range spec.VolumeClaimTemplates {
+			spec.VolumeClaimTemplates[i].ObjectMeta.Labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
+		}
+
 		u.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&statefulSet)
 		if err != nil {
 			return err
