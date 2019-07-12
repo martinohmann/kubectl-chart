@@ -252,13 +252,18 @@ func (o *ApplyOptions) Run() error {
 		return err
 	}
 
-	pvcPruner := &chart.PVCPruner{
+	prunedObjs := o.Recorder.RecordedObjects("pruned")
+	if len(prunedObjs) == 0 {
+		return nil
+	}
+
+	pvcPruner := &chart.PersistentVolumeClaimPruner{
 		BuilderFactory: o.BuilderFactory,
 		Deleter:        o.Deleter,
 		Waiter:         o.Waiter,
 	}
 
-	return pvcPruner.Prune(o.Recorder.Objects("pruned"))
+	return pvcPruner.PruneClaims(prunedObjs)
 }
 
 func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.ApplyOptions {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/diff"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -231,6 +232,8 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 		return err
 	}
 
+	chartObjs := c.Resources.GetObjects()
+
 	return r.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
@@ -238,9 +241,11 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 
 		infoObj := kdiff.InfoObject{Info: info}
 
-		_, found, err := c.Resources.FindMatchingObject(infoObj.Live())
-		if err != nil || found {
-			return err
+		_, found := resources.FindMatchingObject(chartObjs, infoObj.Live())
+		if found {
+			// Objects still present in the chart do not need to be diffed
+			// again as this already happened in diffRenderedResources.
+			return nil
 		}
 
 		differ := diff.NewRemovalDiffer(infoObj.Name(), infoObj.Live())

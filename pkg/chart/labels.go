@@ -1,9 +1,6 @@
 package chart
 
 import (
-	"fmt"
-
-	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -38,7 +35,7 @@ func LabelStatefulSets(objs []runtime.Object) error {
 
 		gvk := obj.GetObjectKind().GroupVersionKind()
 
-		if gvk.Kind != resources.KindStatefulSet {
+		if gvk.GroupKind() != StatefulSetGK {
 			continue
 		}
 
@@ -59,10 +56,4 @@ func LabelStatefulSets(objs []runtime.Object) error {
 	}
 
 	return nil
-}
-
-// PersistentVolumeClaimSelector returns a selector that can be used to query
-// for PersistentVolumeClaims owned by a StatefulSet.
-func PersistentVolumeClaimSelector(statefulSetName string) string {
-	return fmt.Sprintf("%s=%s", LabelOwnedByStatefulSet, statefulSetName)
 }

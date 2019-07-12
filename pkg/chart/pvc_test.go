@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
-	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -13,7 +12,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-func TestPVCPruner_Prune(t *testing.T) {
+func TestPersistentVolumeClaimPruner_PruneClaims(t *testing.T) {
 	deleter := deletions.NewFakeDeleter(nil)
 
 	objs := []runtime.Object{
@@ -59,7 +58,7 @@ func TestPVCPruner_Prune(t *testing.T) {
 		},
 	}
 
-	pruner := &PVCPruner{
+	pruner := &PersistentVolumeClaimPruner{
 		BuilderFactory: func() *resource.Builder {
 			return newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
 				"/persistentvolumeclaims?labelSelector=kubectl-chart%2Fowned-by-statefulset%3Dfoo": runtime.EncodeOrDie(unstructured.UnstructuredJSONScheme, body),
@@ -68,7 +67,7 @@ func TestPVCPruner_Prune(t *testing.T) {
 		Deleter: deleter,
 	}
 
-	err := pruner.Prune(resources.NewVisitor(objs))
+	err := pruner.PruneClaims(objs)
 
 	require.NoError(t, err)
 	require.Len(t, deleter.CalledWith, 1)
