@@ -49,7 +49,7 @@ func TestVisitor_Visit(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, tv.seenResources["chart1"])
+	assert.Equal(t, 2, tv.seenResources["chart1"])
 	assert.Equal(t, 1, tv.seenHooks["chart1"])
 }
 
@@ -67,7 +67,7 @@ func TestVisitor_VisitRecursive(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, tv.seenResources["chart1"])
+	assert.Equal(t, 2, tv.seenResources["chart1"])
 	assert.Equal(t, 1, tv.seenHooks["chart1"])
 
 	assert.Equal(t, 1, tv.seenResources["chart2"])
