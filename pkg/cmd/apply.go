@@ -58,7 +58,6 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 
 	o.ChartFlags.AddFlags(cmd)
 	o.HookFlags.AddFlags(cmd)
-	o.PrintFlags.AddFlags(cmd)
 	o.DiffFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.ServerDryRun, "server-dry-run", o.ServerDryRun, "If true, request will be sent to server with dry-run flag, which means the modifications won't be persisted. This is an alpha feature and flag.")
@@ -73,7 +72,6 @@ type ApplyOptions struct {
 
 	ChartFlags   ChartFlags
 	HookFlags    HookFlags
-	PrintFlags   PrintFlags
 	DiffFlags    DiffFlags
 	DiffOptions  *DiffOptions
 	DryRun       bool
@@ -157,7 +155,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 
 	dryRun := o.DryRun || o.ServerDryRun
 
-	o.Printer = o.PrintFlags.ToPrinter(dryRun)
+	o.Printer = o.DiffFlags.PrintFlags.ToPrinter(dryRun)
 
 	o.Deleter = deletions.NewDeleter(
 		o.IOStreams,

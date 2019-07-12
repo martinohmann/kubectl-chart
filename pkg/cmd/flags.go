@@ -41,8 +41,8 @@ func (f *ChartFlags) ToVisitor(namespace string) (chart.Visitor, error) {
 }
 
 type DiffFlags struct {
-	NoColor bool
-	Context int
+	Context    int
+	PrintFlags PrintFlags
 }
 
 func NewDefaultDiffFlags() DiffFlags {
@@ -52,13 +52,14 @@ func NewDefaultDiffFlags() DiffFlags {
 }
 
 func (f *DiffFlags) AddFlags(cmd *cobra.Command) {
+	f.PrintFlags.AddFlags(cmd)
+
 	cmd.Flags().IntVar(&f.Context, "diff-context", f.Context, "Line context to display before and after each changed block")
-	cmd.Flags().BoolVar(&f.NoColor, "no-diff-color", f.NoColor, "Do not color diff output")
 }
 
 func (f *DiffFlags) ToPrinter() diff.Printer {
 	return diff.NewUnifiedPrinter(diff.Options{
-		Color:   !f.NoColor,
+		Color:   !f.PrintFlags.NoColor,
 		Context: f.Context,
 	})
 }
@@ -68,17 +69,17 @@ type HookFlags struct {
 }
 
 func (f *HookFlags) AddFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&f.NoHooks, "no-hooks", f.NoHooks, "If true, no hooks will be executed")
+	cmd.Flags().BoolVar(&f.NoHooks, "no-hooks", f.NoHooks, "If set, no hooks will be executed")
 }
 
 type PrintFlags struct {
-	Color bool
+	NoColor bool
 }
 
 func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&f.Color, "color", f.Color, "If true, resource operations will be printed in color based on the operation type")
+	cmd.Flags().BoolVar(&f.NoColor, "no-color", f.NoColor, "If set, output will not be colored")
 }
 
 func (f *PrintFlags) ToPrinter(dryRun bool) printers.OperationPrinter {
-	return printers.NewOperationPrinter(f.Color, dryRun)
+	return printers.NewOperationPrinter(!f.NoColor, dryRun)
 }
