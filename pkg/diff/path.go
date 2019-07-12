@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // PathDiffer recursively diffs files in paths.
@@ -29,12 +31,12 @@ func NewPathDiffer(from, to string) *PathDiffer {
 func (d *PathDiffer) Print(p Printer, w io.Writer) error {
 	fromInfo, err := os.Stat(d.From)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "while creating path diff")
 	}
 
 	toInfo, err := os.Stat(d.To)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "while creating path diff")
 	}
 
 	var pairs []pair
@@ -85,7 +87,7 @@ func (d *PathDiffer) print(p Printer, w io.Writer, pair pair) error {
 	if pair.A != nil {
 		A, err = ioutil.ReadFile(pair.A.AbsPath)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "while reading file for path diff")
 		}
 
 		s.A = string(A)
@@ -95,7 +97,7 @@ func (d *PathDiffer) print(p Printer, w io.Writer, pair pair) error {
 	if pair.B != nil {
 		B, err = ioutil.ReadFile(pair.B.AbsPath)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "while reading file for path diff")
 		}
 
 		s.B = string(B)
@@ -140,7 +142,7 @@ func collectFileInfos(dir string) ([]fileInfo, error) {
 
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "while collecting file info for path diff")
 		}
 
 		fileInfos = append(fileInfos, fileInfo{
@@ -161,7 +163,7 @@ func getFileInfos(path string, info os.FileInfo) ([]fileInfo, error) {
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "while collecting file info for path diff")
 	}
 
 	fi := fileInfo{
