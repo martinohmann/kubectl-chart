@@ -35,10 +35,7 @@ func NewRecordingPrinter(r recorders.OperationRecorder, operation string, p Reso
 
 // PrintObj implements ResourcePrinter.
 func (p *RecordingPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
-	err := p.Recorder.Record(p.Operation, obj)
-	if err != nil {
-		return err
-	}
+	defer p.Recorder.Record(p.Operation, obj)
 
 	return p.Printer.PrintObj(obj, w)
 }

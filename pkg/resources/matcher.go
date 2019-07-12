@@ -8,51 +8,32 @@ import (
 // FindMatching walks haystack and returns the first object matching needle if
 // there is one. The second return value indicates whether the object was found
 // or not.
-func FindMatching(haystack []runtime.Object, needle runtime.Object) (runtime.Object, bool, error) {
+func FindMatchingObject(haystack []runtime.Object, needle runtime.Object) (runtime.Object, bool) {
 	for _, obj := range haystack {
-		ok, err := matches(obj, needle)
-		if err != nil {
-			return nil, false, err
-		}
-
-		if ok {
-			return obj, true, nil
+		if matches(obj, needle) {
+			return obj, true
 		}
 	}
 
-	return nil, false, nil
+	return nil, false
 }
 
 // matches returns true as the first return value of a matches b. Two objects
 // match if their kind, namespace and name are the same.
-func matches(a, b runtime.Object) (bool, error) {
-	typeA, err := meta.TypeAccessor(a)
-	if err != nil {
-		return false, err
-	}
-
-	typeB, err := meta.TypeAccessor(b)
-	if err != nil {
-		return false, err
-	}
+func matches(a, b runtime.Object) bool {
+	typeA, _ := meta.TypeAccessor(a)
+	typeB, _ := meta.TypeAccessor(b)
 
 	if typeA.GetKind() != typeB.GetKind() {
-		return false, nil
+		return false
 	}
 
-	metaA, err := meta.Accessor(a)
-	if err != nil {
-		return false, err
-	}
-
-	metaB, err := meta.Accessor(b)
-	if err != nil {
-		return false, err
-	}
+	metaA, _ := meta.Accessor(a)
+	metaB, _ := meta.Accessor(b)
 
 	if metaA.GetNamespace() != metaB.GetNamespace() {
-		return false, nil
+		return false
 	}
 
-	return metaA.GetName() == metaB.GetName(), nil
+	return metaA.GetName() == metaB.GetName()
 }

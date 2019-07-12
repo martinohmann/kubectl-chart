@@ -193,14 +193,17 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		pvcPruner := &chart.PVCPruner{
+		deletedObjs := resources.ToObjectList(infos)
+		if len(deletedObjs) == 0 {
+			return nil
+		}
+
+		pvcPruner := &chart.PersistentVolumeClaimPruner{
 			BuilderFactory: o.BuilderFactory,
 			Deleter:        o.Deleter,
 			Waiter:         o.Waiter,
 		}
 
-		visitor := resources.NewInfoListVisitor(infos)
-
-		return pvcPruner.Prune(visitor)
+		return pvcPruner.PruneClaims(deletedObjs)
 	})
 }

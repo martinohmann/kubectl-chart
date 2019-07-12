@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
@@ -38,12 +37,7 @@ func TestRecordingPrinter(t *testing.T) {
 
 	assert.NoError(t, p.PrintObj(obj, buf))
 
-	recordedObjs := make([]runtime.Object, 0)
-
-	rec.Objects("created").Visit(func(recordedObj runtime.Object, err error) error {
-		recordedObjs = append(recordedObjs, recordedObj)
-		return nil
-	})
+	recordedObjs := rec.RecordedObjects("created")
 
 	require.Len(t, recordedObjs, 1)
 	assert.Equal(t, obj, recordedObjs[0])

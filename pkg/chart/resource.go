@@ -1,7 +1,6 @@
 package chart
 
 import (
-	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -44,10 +43,6 @@ func (r *Resource) DefaultNamespace(namespace string) error {
 	return nil
 }
 
-func (r *Resource) DeletionPolicy() string {
-	return r.nestedString("metadata", "annotations", AnnotationDeletionPolicy)
-}
-
 func (r *Resource) SetLabel(key, value string) error {
 	return r.setNestedField(value, "metadata", "labels", key)
 }
@@ -70,11 +65,4 @@ func (l ResourceList) GetObjects() []runtime.Object {
 	}
 
 	return objs
-}
-
-// FindMatchingObject walks the resource list and returns the first object in
-// the list matching obj if there is one. The second return value indicates
-// whether the object was found or not.
-func (l ResourceList) FindMatchingObject(obj runtime.Object) (runtime.Object, bool, error) {
-	return resources.FindMatching(l.GetObjects(), obj)
 }

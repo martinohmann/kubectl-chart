@@ -8,7 +8,6 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
-	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +23,29 @@ import (
 )
 
 const (
+	// AnnotationHookType contains the type of the hook. If this annotation is
+	// set on a Job it will be treated as a hook and not show up as regular
+	// resource anymore.
+	AnnotationHookType = "kubectl-chart/hook-type"
+
+	// AnnotationHookAllowFailure controls the behaviour in the event where the
+	// hook fails due to timeouts or because the job failed. If set to "true",
+	// these errors just will be logged and processing of other hooks and
+	// resources continues. Other unhandled errors occuring during hook
+	// execution (e.g. API-Server errors) will still bubble up the error
+	// handling chain.
+	AnnotationHookAllowFailure = "kubectl-chart/hook-allow-failure"
+
+	// AnnotationHookNoWait controls the waiting behaviour. If set to "true",
+	// it is not waited for the hook to complete. This cannot be used together
+	// with AnnotationHookAllowFailure because the success of a hook is not
+	// checked if we do not wait for it to finish.
+	AnnotationHookNoWait = "kubectl-chart/hook-no-wait"
+
+	// AnnotationHookWaitTimeout sets a custom wait timeout for a hook. If not
+	// set, DefaultHookWaitTimeout is used.
+	AnnotationHookWaitTimeout = "kubectl-chart/hook-wait-timeout"
+
 	PreApplyHook   = "pre-apply"
 	PostApplyHook  = "post-apply"
 	PreDeleteHook  = "pre-delete"
@@ -31,15 +53,15 @@ const (
 )
 
 var (
+	// JobGK is the GroupKind that hook resources are required to have.
+	JobGK = schema.GroupKind{Group: "batch", Kind: "Job"}
+
 	// DefaultHookWaitTimeout is the timeout that is used for wait operations
 	// if it is not overridden in a hooks configuration.
 	DefaultHookWaitTimeout = 2 * time.Hour
 
 	// ValidHookTypes contains a list of supported hook types.
 	ValidHookTypes = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
-
-	// ValidHookResourceKinds contains a list of resources that can be used as hooks.
-	ValidHookResourceKinds = []string{resources.KindJob}
 )
 
 // Hook is a chart hook that gets executed before or after apply/delete
@@ -154,22 +176,16 @@ func IsValidHookType(typ string) bool {
 	return false
 }
 
-func IsValidHookResourceKind(kind string) bool {
-	for _, k := range ValidHookResourceKinds {
-		if k == kind {
-			return true
-		}
-	}
-
-	return false
-}
-
 // HasHookAnnotation returns true if obj is annotated to be a hook.
 func HasHookAnnotation(obj runtime.Object) (bool, error) {
-	_, found, err := resources.GetAnnotation(obj, AnnotationHookType)
+	metadata, err := meta.Accessor(obj)
 	if err != nil {
 		return false, err
 	}
+
+	annotations := metadata.GetAnnotations()
+
+	_, found := annotations[AnnotationHookType]
 
 	return found, nil
 }
@@ -199,9 +215,9 @@ type HookResourceKindError struct {
 
 func (e HookResourceKindError) Error() string {
 	return fmt.Sprintf(
-		"invalid hook resource kind %q, allowed values are \"%s\"",
+		"invalid hook resource kind %q, only %q is allowed",
 		e.Kind,
-		strings.Join(ValidHookResourceKinds, `", "`),
+		JobGK.Kind,
 	)
 }
 
@@ -212,7 +228,7 @@ func ValidateHook(h *Hook) error {
 		return HookTypeError{Type: h.Type()}
 	}
 
-	if !IsValidHookResourceKind(h.GetKind()) {
+	if h.GetKind() != JobGK.Kind {
 		return HookResourceKindError{Kind: h.GetKind()}
 	}
 
@@ -345,7 +361,7 @@ func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
 		Unstructured().
 		ContinueOnError().
 		AllNamespaces(true).
-		ResourceTypeOrNameArgs(true, resources.KindJob).
+		ResourceTypeOrNameArgs(true, JobGK.Kind).
 		LabelSelector(c.HookLabelSelector(hookType)).
 		Flatten().
 		Do().

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -121,9 +120,7 @@ func TestFindMatching(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, found, err := FindMatching(tc.haystack, tc.needle)
-
-			require.NoError(t, err)
+			_, found := FindMatchingObject(tc.haystack, tc.needle)
 
 			assert.Equal(t, tc.found, found)
 		})
