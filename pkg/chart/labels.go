@@ -45,13 +45,7 @@ func LabelStatefulSets(objs []runtime.Object) error {
 			return err
 		}
 
-		spec := &statefulSet.Spec
-		spec.Selector.MatchLabels[LabelOwnedByStatefulSet] = statefulSet.GetName()
-		spec.Template.ObjectMeta.Labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
-
-		for i := range spec.VolumeClaimTemplates {
-			spec.VolumeClaimTemplates[i].ObjectMeta.Labels[LabelOwnedByStatefulSet] = statefulSet.GetName()
-		}
+		labelStatefulSet(&statefulSet)
 
 		u.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&statefulSet)
 		if err != nil {
@@ -60,4 +54,26 @@ func LabelStatefulSets(objs []runtime.Object) error {
 	}
 
 	return nil
+}
+
+func labelStatefulSet(statefulSet *appsv1.StatefulSet) {
+	owner := statefulSet.GetName()
+	spec := &statefulSet.Spec
+
+	spec.Selector.MatchLabels = withOwnerLabel(spec.Selector.MatchLabels, owner)
+	spec.Template.ObjectMeta.Labels = withOwnerLabel(spec.Template.ObjectMeta.Labels, owner)
+
+	for i := range spec.VolumeClaimTemplates {
+		spec.VolumeClaimTemplates[i].ObjectMeta.Labels = withOwnerLabel(spec.VolumeClaimTemplates[i].ObjectMeta.Labels, owner)
+	}
+}
+
+func withOwnerLabel(labels map[string]string, value string) map[string]string {
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
+	labels[LabelOwnedByStatefulSet] = value
+
+	return labels
 }
