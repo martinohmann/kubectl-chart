@@ -67,7 +67,6 @@ type DeleteOptions struct {
 	Visitor        chart.Visitor
 	HookExecutor   hooks.Executor
 	Deleter        deletions.Deleter
-	Waiter         wait.Waiter
 
 	Namespace        string
 	EnforceNamespace bool
@@ -106,20 +105,18 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
 	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun)
 
 	if o.HookFlags.NoHooks {
 		o.HookExecutor = &hooks.NoopExecutor{}
 	} else {
 		o.HookExecutor = &chart.HookExecutor{
-			IOStreams:      o.IOStreams,
-			DryRun:         o.DryRun,
-			DynamicClient:  o.DynamicClient,
-			Mapper:         o.Mapper,
-			BuilderFactory: o.BuilderFactory,
-			Waiter:         o.Waiter,
-			Deleter:        o.Deleter,
+			IOStreams:     o.IOStreams,
+			DryRun:        o.DryRun,
+			DynamicClient: o.DynamicClient,
+			Mapper:        o.Mapper,
+			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
+			Deleter:       o.Deleter,
 		}
 	}
 
@@ -141,13 +138,12 @@ func (o *DeleteOptions) Run() error {
 
 		builder := o.BuilderFactory().
 			Unstructured().
-			ContinueOnError().
-			RequireObject(false)
+			ContinueOnError()
 
 		if o.Prune {
 			builder = builder.
 				AllNamespaces(true).
-				ResourceTypeOrNameArgs(true, "all").
+				ResourceTypeOrNameArgs(false, "all").
 				LabelSelector(c.LabelSelector())
 		} else {
 			chart.SortResources(c.Resources, chart.DeleteOrder)
@@ -175,15 +171,16 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
+		if len(infos) == 0 {
+			return nil
+		}
+
 		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
 		if err != nil {
 			return err
 		}
 
-		err = o.Deleter.Delete(&deletions.Request{
-			Waiter:  o.Waiter,
-			Visitor: resource.InfoListVisitor(infos),
-		})
+		err = o.Deleter.Delete(resource.InfoListVisitor(infos))
 		if err != nil {
 			return err
 		}
@@ -199,9 +196,9 @@ func (o *DeleteOptions) Run() error {
 		}
 
 		pvcPruner := &chart.PersistentVolumeClaimPruner{
-			BuilderFactory: o.BuilderFactory,
-			Deleter:        o.Deleter,
-			Waiter:         o.Waiter,
+			Deleter:       o.Deleter,
+			DynamicClient: o.DynamicClient,
+			Mapper:        o.Mapper,
 		}
 
 		return pvcPruner.PruneClaims(deletedObjs)

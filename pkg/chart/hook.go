@@ -8,6 +8,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -53,15 +54,15 @@ const (
 )
 
 var (
-	// JobGK is the GroupKind that hook resources are required to have.
-	JobGK = schema.GroupKind{Group: "batch", Kind: "Job"}
-
 	// DefaultHookWaitTimeout is the timeout that is used for wait operations
 	// if it is not overridden in a hooks configuration.
 	DefaultHookWaitTimeout = 2 * time.Hour
 
 	// ValidHookTypes contains a list of supported hook types.
 	ValidHookTypes = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
+
+	jobGK  = schema.GroupKind{Group: "batch", Kind: "Job"}
+	jobGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 )
 
 // Hook is a chart hook that gets executed before or after apply/delete
@@ -217,7 +218,7 @@ func (e HookResourceKindError) Error() string {
 	return fmt.Sprintf(
 		"invalid hook resource kind %q, only %q is allowed",
 		e.Kind,
-		JobGK.Kind,
+		jobGK.Kind,
 	)
 }
 
@@ -228,7 +229,7 @@ func ValidateHook(h *Hook) error {
 		return HookTypeError{Type: h.Type()}
 	}
 
-	if h.GetKind() != JobGK.Kind {
+	if h.GetKind() != jobGK.Kind {
 		return HookResourceKindError{Kind: h.GetKind()}
 	}
 
@@ -255,12 +256,11 @@ func ValidateHook(h *Hook) error {
 // HookExecutor executes chart lifecycle hooks.
 type HookExecutor struct {
 	genericclioptions.IOStreams
-	DynamicClient  dynamic.Interface
-	BuilderFactory func() *resource.Builder
-	Mapper         meta.RESTMapper
-	Deleter        deletions.Deleter
-	Waiter         wait.Waiter
-	DryRun         bool
+	DynamicClient dynamic.Interface
+	Mapper        meta.RESTMapper
+	Deleter       deletions.Deleter
+	Waiter        wait.Waiter
+	DryRun        bool
 }
 
 // ExecHooks executes hooks of hookType from chart c. It will attempt to delete
@@ -291,12 +291,7 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 
 		gvk := hook.GroupVersionKind()
 
-		gk := schema.GroupKind{
-			Group: gvk.Group,
-			Kind:  gvk.Kind,
-		}
-
-		mapping, err := e.Mapper.RESTMapping(gk, gvk.Version)
+		mapping, err := e.Mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
 			return err
 		}
@@ -356,24 +351,33 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 	return e.waitForCompletion(infos, resourceOptions)
 }
 
+func (e *HookExecutor) getMapping(obj *unstructured.Unstructured) (*meta.RESTMapping, error) {
+	gvk := obj.GroupVersionKind()
+
+	return e.Mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+}
+
 func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
-	result := e.BuilderFactory().
-		Unstructured().
-		ContinueOnError().
-		AllNamespaces(true).
-		ResourceTypeOrNameArgs(true, JobGK.Kind).
-		LabelSelector(c.HookLabelSelector(hookType)).
-		Flatten().
-		Do().
-		IgnoreErrors(apierrors.IsNotFound)
-	if err := result.Err(); err != nil {
+	objs, err := e.DynamicClient.
+		Resource(jobGVR).
+		Namespace(metav1.NamespaceAll).
+		List(metav1.ListOptions{
+			LabelSelector: c.HookLabelSelector(hookType),
+		})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+
+	if err != nil {
 		return err
 	}
 
-	return e.Deleter.Delete(&deletions.Request{
-		Waiter:  e.Waiter,
-		Visitor: result,
-	})
+	infos, err := resources.ToInfoList(objs, e.Mapper)
+	if err != nil {
+		return err
+	}
+
+	return e.Deleter.Delete(resource.InfoListVisitor(infos))
 }
 
 func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {

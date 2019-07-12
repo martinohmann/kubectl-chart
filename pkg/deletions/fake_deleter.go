@@ -1,30 +1,38 @@
 package deletions
 
-import "sync"
+import (
+	"sync"
+
+	"k8s.io/cli-runtime/pkg/resource"
+)
 
 var _ Deleter = &FakeDeleter{}
 
 type FakeDeleter struct {
 	sync.Mutex
-	Handler    func(r *Request) error
-	CalledWith []*Request
+	Infos  []*resource.Info
+	Called int
 }
 
-func NewFakeDeleter(handler func(*Request) error) *FakeDeleter {
+func NewFakeDeleter() *FakeDeleter {
 	return &FakeDeleter{
-		Handler:    handler,
-		CalledWith: make([]*Request, 0),
+		Infos: []*resource.Info{},
 	}
 }
 
-func (d *FakeDeleter) Delete(r *Request) error {
+func (d *FakeDeleter) Delete(v resource.Visitor) error {
 	d.Lock()
-	d.CalledWith = append(d.CalledWith, r)
-	d.Unlock()
+	defer d.Unlock()
 
-	if d.Handler == nil {
+	d.Called++
+
+	return v.Visit(func(info *resource.Info, err error) error {
+		if err != nil {
+			return err
+		}
+
+		d.Infos = append(d.Infos, info)
+
 		return nil
-	}
-
-	return d.Handler(r)
+	})
 }
