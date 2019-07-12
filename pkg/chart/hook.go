@@ -351,12 +351,6 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 	return e.waitForCompletion(infos, resourceOptions)
 }
 
-func (e *HookExecutor) getMapping(obj *unstructured.Unstructured) (*meta.RESTMapping, error) {
-	gvk := obj.GroupVersionKind()
-
-	return e.Mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-}
-
 func (e *HookExecutor) cleanupHooks(c *Chart, hookType string) error {
 	objs, err := e.DynamicClient.
 		Resource(jobGVR).
