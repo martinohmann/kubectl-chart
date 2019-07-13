@@ -97,8 +97,6 @@ func (p *PersistentVolumeClaimPruner) pruneClaims(obj runtime.Object, mapping *m
 		return err
 	}
 
-	fmt.Println(objs.Items)
-
 	infos, err := resources.ToInfoList(objs, p.Mapper)
 	if err != nil {
 		return err
