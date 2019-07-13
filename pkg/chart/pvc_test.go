@@ -1,83 +1,192 @@
 package chart
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/cli-runtime/pkg/resource"
+	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes/scheme"
+	clienttesting "k8s.io/client-go/testing"
 )
 
-func TestPersistentVolumeClaimPruner_PruneClaims(t *testing.T) {
-	deleter := deletions.NewFakeDeleter(nil)
-
-	objs := []runtime.Object{
-		&unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "apps/v1",
-				"kind":       "StatefulSet",
-				"metadata": map[string]interface{}{
-					"annotations": map[string]interface{}{
-						AnnotationDeletionPolicy: DeletionPolicyDeletePVCs,
-					},
-					"name": "foo",
-				},
-			},
-		},
-		&unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "apps/v1",
-				"kind":       "Deployment",
-				"metadata": map[string]interface{}{
-					"name": "bar",
-				},
-			},
-		},
-		&unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "apps/v1",
-				"kind":       "StatefulSet",
-				"metadata": map[string]interface{}{
-					"name": "baz",
-				},
-			},
-		},
+func newUnstructuredList(items ...*unstructured.Unstructured) *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	for i := range items {
+		list.Items = append(list.Items, *items[i])
 	}
+	return list
+}
 
-	body := &unstructured.Unstructured{
+func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "PersistentVolumeClaim",
+			"apiVersion": apiVersion,
+			"kind":       kind,
 			"metadata": map[string]interface{}{
-				"name": "qux",
+				"namespace": namespace,
+				"name":      name,
+				"uid":       "some-UID-value",
+			},
+		},
+	}
+}
+
+func TestPersistentVolumeClaimPruner_PruneClaims(t *testing.T) {
+	tests := []struct {
+		name       string
+		objs       []runtime.Object
+		fakeClient func() *dynamicfakeclient.FakeDynamicClient
+
+		expectedErr     string
+		validateActions func(t *testing.T, actions []clienttesting.Action)
+		validateDeleter func(t *testing.T, deleter *deletions.FakeDeleter)
+	}{
+		{
+			name: "no StatefulSet",
+			objs: []runtime.Object{
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "bar",
+						},
+					},
+				},
+			},
+			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
+				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
+			},
+			validateActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 0 {
+					t.Fatal(spew.Sdump(actions))
+				}
+			},
+			validateDeleter: func(t *testing.T, deleter *deletions.FakeDeleter) {
+				if deleter.Called != 0 {
+					t.Fatal(spew.Sdump(deleter))
+				}
+			},
+		},
+		{
+			name: "StatefulSet without deletion policy",
+			objs: []runtime.Object{
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "StatefulSet",
+						"metadata": map[string]interface{}{
+							"name": "baz",
+						},
+					},
+				},
+			},
+			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
+				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
+			},
+			validateActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 0 {
+					t.Fatal(spew.Sdump(actions))
+				}
+			},
+			validateDeleter: func(t *testing.T, deleter *deletions.FakeDeleter) {
+				if deleter.Called != 0 {
+					t.Fatal(spew.Sdump(deleter))
+				}
+			},
+		},
+		{
+			name: "deletes only PVCs for StatefulSets with correct deletion policy",
+			objs: []runtime.Object{
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "StatefulSet",
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{
+								AnnotationDeletionPolicy: DeletionPolicyDeletePVCs,
+							},
+							"name": "foo",
+						},
+					},
+				},
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "bar",
+						},
+					},
+				},
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "StatefulSet",
+						"metadata": map[string]interface{}{
+							"name": "baz",
+						},
+					},
+				},
+			},
+			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
+				fakeClient := dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
+				fakeClient.PrependReactor("list", "persistentvolumeclaims", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, newUnstructuredList(newUnstructured("v1", "PersistentVolumeClaim", "ns-foo", "name-foo")), nil
+				})
+
+				return fakeClient
+			},
+			validateActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Fatal(spew.Sdump(actions))
+				}
+				if !actions[0].Matches("list", "persistentvolumeclaims") || actions[0].(clienttesting.ListAction).GetListRestrictions().Labels.String() != "kubectl-chart/owned-by-statefulset=foo" {
+					t.Error(spew.Sdump(actions))
+				}
+			},
+			validateDeleter: func(t *testing.T, deleter *deletions.FakeDeleter) {
+				if deleter.Called != 1 {
+					t.Fatal(spew.Sdump(deleter))
+				}
 			},
 		},
 	}
 
-	pruner := &PersistentVolumeClaimPruner{
-		BuilderFactory: func() *resource.Builder {
-			return newDefaultBuilderWith(fakeClientWith("", t, map[string]string{
-				"/persistentvolumeclaims?labelSelector=kubectl-chart%2Fowned-by-statefulset%3Dfoo": runtime.EncodeOrDie(unstructured.UnstructuredJSONScheme, body),
-			}))
-		},
-		Deleter: deleter,
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fakeClient := test.fakeClient()
+			deleter := deletions.NewFakeDeleter()
+
+			pruner := NewPersistentVolumeClaimPruner(
+				fakeClient,
+				deleter,
+				testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme),
+			)
+
+			err := pruner.PruneClaims(test.objs)
+			switch {
+			case err == nil && len(test.expectedErr) == 0:
+			case err != nil && len(test.expectedErr) == 0:
+				t.Fatal(err)
+			case err == nil && len(test.expectedErr) != 0:
+				t.Fatalf("missing: %q", test.expectedErr)
+			case err != nil && len(test.expectedErr) != 0:
+				if !strings.Contains(err.Error(), test.expectedErr) {
+					t.Fatalf("expected %q, got %q", test.expectedErr, err.Error())
+				}
+			}
+
+			test.validateActions(t, fakeClient.Actions())
+
+			if test.validateDeleter != nil {
+				test.validateDeleter(t, deleter)
+			}
+		})
 	}
-
-	err := pruner.PruneClaims(objs)
-
-	require.NoError(t, err)
-	require.Len(t, deleter.CalledWith, 1)
-
-	infos, _ := deleter.CalledWith[0].Visitor.(*resource.Result).Infos()
-
-	require.Len(t, infos, 1)
-
-	pvc, ok := infos[0].Object.(*v1.PersistentVolumeClaim)
-
-	require.True(t, ok)
-	assert.Equal(t, "qux", pvc.GetName())
 }

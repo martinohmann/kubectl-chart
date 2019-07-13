@@ -88,7 +88,6 @@ type ApplyOptions struct {
 	Serializer      chart.Serializer
 	Visitor         chart.Visitor
 	HookExecutor    hooks.Executor
-	Waiter          wait.Waiter
 	Deleter         deletions.Deleter
 
 	Namespace        string
@@ -154,20 +153,18 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Waiter = wait.NewDefaultWaiter(o.IOStreams)
 	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun || o.ServerDryRun)
 
 	if o.HookFlags.NoHooks {
 		o.HookExecutor = &hooks.NoopExecutor{}
 	} else {
 		o.HookExecutor = &chart.HookExecutor{
-			IOStreams:      o.IOStreams,
-			DryRun:         o.DryRun || o.ServerDryRun,
-			DynamicClient:  o.DynamicClient,
-			Mapper:         o.Mapper,
-			BuilderFactory: o.BuilderFactory,
-			Waiter:         o.Waiter,
-			Deleter:        o.Deleter,
+			IOStreams:     o.IOStreams,
+			DryRun:        o.DryRun || o.ServerDryRun,
+			DynamicClient: o.DynamicClient,
+			Mapper:        o.Mapper,
+			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
+			Deleter:       o.Deleter,
 		}
 	}
 
@@ -258,9 +255,9 @@ func (o *ApplyOptions) Run() error {
 	}
 
 	pvcPruner := &chart.PersistentVolumeClaimPruner{
-		BuilderFactory: o.BuilderFactory,
-		Deleter:        o.Deleter,
-		Waiter:         o.Waiter,
+		Deleter:       o.Deleter,
+		DynamicClient: o.DynamicClient,
+		Mapper:        o.Mapper,
 	}
 
 	return pvcPruner.PruneClaims(prunedObjs)

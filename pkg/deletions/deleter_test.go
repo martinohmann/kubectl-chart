@@ -144,11 +144,7 @@ func TestDeleter_Delete(t *testing.T) {
 				DryRun:        test.dryRun,
 			}
 
-			req := &Request{
-				Visitor: resource.InfoListVisitor(test.infos),
-			}
-
-			err := d.Delete(req)
+			err := d.Delete(resource.InfoListVisitor(test.infos))
 			switch {
 			case err == nil && len(test.expectedErr) == 0:
 			case err != nil && len(test.expectedErr) == 0:

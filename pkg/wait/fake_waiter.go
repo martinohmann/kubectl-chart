@@ -6,25 +6,20 @@ var _ Waiter = &FakeWaiter{}
 
 type FakeWaiter struct {
 	sync.Mutex
-	Handler    func(r *Request) error
-	CalledWith []*Request
+	Requests []*Request
 }
 
-func NewFakeWaiter(handler func(*Request) error) *FakeWaiter {
+func NewFakeWaiter() *FakeWaiter {
 	return &FakeWaiter{
-		Handler:    handler,
-		CalledWith: make([]*Request, 0),
+		Requests: make([]*Request, 0),
 	}
 }
 
 func (d *FakeWaiter) Wait(r *Request) error {
 	d.Lock()
-	d.CalledWith = append(d.CalledWith, r)
-	d.Unlock()
+	defer d.Unlock()
 
-	if d.Handler == nil {
-		return nil
-	}
+	d.Requests = append(d.Requests, r)
 
-	return d.Handler(r)
+	return nil
 }

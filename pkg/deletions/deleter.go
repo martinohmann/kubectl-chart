@@ -15,19 +15,12 @@ import (
 	"k8s.io/klog"
 )
 
-// Request is a request for resource deletions.
-type Request struct {
-	// Visitor will be used to walk the resources that should be deleted.
-	Visitor resource.Visitor
-
-	// Waiter if not nil, the waiter will be used to wait for object deletion.
-	Waiter wait.Waiter
-}
-
 // Deleter is a resource deleter.
 type Deleter interface {
-	// Delete takes a deletion request and performs it.
-	Delete(r *Request) error
+	// Delete walks all resources in the visitor and attempts to delete them.
+	// Optionally, it waits for until the deletion of the resources is complete
+	// if the Deleter supports waiting.
+	Delete(v resource.Visitor) error
 }
 
 // deleter is a Deleter implementation.
@@ -35,6 +28,7 @@ type deleter struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
 	Printer       printers.ResourcePrinter
+	Waiter        wait.Waiter
 
 	// DryRun if enabled, deletion is only simulated and printed.
 	DryRun bool
@@ -46,25 +40,19 @@ func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, d
 		IOStreams:     streams,
 		DynamicClient: client,
 		DryRun:        dryRun,
+		Waiter:        wait.NewDefaultWaiter(streams),
 		Printer:       printers.NewNamePrinter("deleted", dryRun),
 	}
 }
 
-// Delete performs a deletion request. It will walk all resources in the
-// visitor provided in the request and attempts to delete them. Optionally, it
-// is waited for until the deletion of the resources is complete if
-// WaitForDeletion is set in the request.
-func (d *deleter) Delete(r *Request) error {
+// Delete implements Deleter.
+func (d *deleter) Delete(v resource.Visitor) error {
 	found := 0
 
 	deletedInfos := []*resource.Info{}
 	uidMap := wait.UIDMap{}
 
-	err := r.Visitor.Visit(func(info *resource.Info, err error) error {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-
+	err := v.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
 		}
@@ -110,14 +98,14 @@ func (d *deleter) Delete(r *Request) error {
 		return err
 	}
 
-	if r.Waiter == nil || d.DryRun {
+	if d.Waiter == nil || d.DryRun {
 		return nil
 	}
 
-	err = r.Waiter.Wait(&wait.Request{
+	err = d.Waiter.Wait(&wait.Request{
 		ConditionFn: wait.NewDeletedConditionFunc(d.DynamicClient, d.ErrOut, uidMap),
 		Options: wait.Options{
-			Timeout: 24 * time.Hour,
+			Timeout: 2 * time.Hour,
 		},
 		Visitor: resource.InfoListVisitor(deletedInfos),
 	})
@@ -130,6 +118,7 @@ func (d *deleter) Delete(r *Request) error {
 
 	return err
 }
+
 func (d *deleter) getResource(info *resource.Info) (*unstructured.Unstructured, error) {
 	return d.DynamicClient.
 		Resource(info.Mapping.Resource).

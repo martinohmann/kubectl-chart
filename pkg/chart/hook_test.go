@@ -30,18 +30,16 @@ import (
 
 func TestHookExecutor_ExecHooks(t *testing.T) {
 	cases := []struct {
-		name          string
-		fakeClient    func() *dynamicfakeclient.FakeDynamicClient
-		hooks         HookMap
-		hookType      string
-		dryRun        bool
-		deleteHandler func(*deletions.Request) error
-		waitHandler   func(*wait.Request) error
+		name       string
+		fakeClient func() *dynamicfakeclient.FakeDynamicClient
+		hooks      HookMap
+		hookType   string
+		dryRun     bool
 
-		expectedErr            string
-		validateActions        func(t *testing.T, actions []clienttesting.Action)
-		validateDeleteRequests func(t *testing.T, reqs []*deletions.Request)
-		validateWaitRequests   func(t *testing.T, reqs []*wait.Request)
+		expectedErr          string
+		validateActions      func(t *testing.T, actions []clienttesting.Action)
+		validateDeletions    func(t *testing.T, deleter *deletions.FakeDeleter)
+		validateWaitRequests func(t *testing.T, reqs []*wait.Request)
 	}{
 		{
 			name: "execute one hook",
@@ -78,14 +76,19 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 1 {
+				if len(actions) != 2 {
 					t.Fatal(spew.Sdump(actions))
 				}
-				if !actions[0].Matches("create", "jobs") {
+
+				if actions[0].GetVerb() != "list" {
 					t.Error(spew.Sdump(actions))
 				}
 
-				obj := actions[0].(clienttesting.CreateAction).GetObject()
+				if !actions[1].Matches("create", "jobs") {
+					t.Error(spew.Sdump(actions))
+				}
+
+				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
 				metadata, err := meta.Accessor(obj)
 				if err != nil {
@@ -146,14 +149,19 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 1 {
+				if len(actions) != 2 {
 					t.Fatal(spew.Sdump(actions))
 				}
-				if !actions[0].Matches("create", "jobs") {
+
+				if actions[0].GetVerb() != "list" {
 					t.Error(spew.Sdump(actions))
 				}
 
-				obj := actions[0].(clienttesting.CreateAction).GetObject()
+				if !actions[1].Matches("create", "jobs") {
+					t.Error(spew.Sdump(actions))
+				}
+
+				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
 				metadata, err := meta.Accessor(obj)
 				if err != nil {
@@ -208,14 +216,19 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 1 {
+				if len(actions) != 2 {
 					t.Fatal(spew.Sdump(actions))
 				}
-				if !actions[0].Matches("create", "jobs") {
+
+				if actions[0].GetVerb() != "list" {
 					t.Error(spew.Sdump(actions))
 				}
 
-				obj := actions[0].(clienttesting.CreateAction).GetObject()
+				if !actions[1].Matches("create", "jobs") {
+					t.Error(spew.Sdump(actions))
+				}
+
+				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
 				metadata, err := meta.Accessor(obj)
 				if err != nil {
@@ -281,11 +294,15 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 1 {
+				if len(actions) != 2 {
 					t.Fatal(spew.Sdump(actions))
 				}
 
-				if !actions[0].Matches("create", "jobs") {
+				if actions[0].GetVerb() != "list" {
+					t.Error(spew.Sdump(actions))
+				}
+
+				if !actions[1].Matches("create", "jobs") {
 					t.Error(spew.Sdump(actions))
 				}
 			},
@@ -337,13 +354,17 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 0 {
+				if len(actions) != 1 {
 					t.Fatal(spew.Sdump(actions))
 				}
+
+				if actions[0].GetVerb() != "list" {
+					t.Error(spew.Sdump(actions))
+				}
 			},
-			validateDeleteRequests: func(t *testing.T, reqs []*deletions.Request) {
-				if len(reqs) != 1 {
-					t.Fatal(spew.Sdump(reqs))
+			validateDeletions: func(t *testing.T, deleter *deletions.FakeDeleter) {
+				if len(deleter.Infos) != 0 {
+					t.Fatal(spew.Sdump(deleter.Infos))
 				}
 			},
 			validateWaitRequests: func(t *testing.T, reqs []*wait.Request) {
@@ -373,8 +394,8 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeClient := tc.fakeClient()
-			deleter := deletions.NewFakeDeleter(tc.deleteHandler)
-			waiter := wait.NewFakeWaiter(tc.waitHandler)
+			deleter := deletions.NewFakeDeleter()
+			waiter := wait.NewFakeWaiter()
 
 			e := &HookExecutor{
 				IOStreams:     genericclioptions.NewTestIOStreamsDiscard(),
@@ -382,10 +403,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				Waiter:        waiter,
 				Mapper:        testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme),
 				DynamicClient: fakeClient,
-				BuilderFactory: func() *resource.Builder {
-					return newDefaultBuilder()
-				},
-				DryRun: tc.dryRun,
+				DryRun:        tc.dryRun,
 			}
 
 			err := e.ExecHooks(newTestChart(tc.hooks), tc.hookType)
@@ -405,12 +423,12 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				tc.validateActions(t, fakeClient.Actions())
 			}
 
-			if tc.validateDeleteRequests != nil {
-				tc.validateDeleteRequests(t, deleter.CalledWith)
+			if tc.validateDeletions != nil {
+				tc.validateDeletions(t, deleter)
 			}
 
 			if tc.validateWaitRequests != nil {
-				tc.validateWaitRequests(t, waiter.CalledWith)
+				tc.validateWaitRequests(t, waiter.Requests)
 			}
 		})
 	}

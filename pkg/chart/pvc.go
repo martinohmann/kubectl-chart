@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
-	"github.com/martinohmann/kubectl-chart/pkg/wait"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/dynamic"
 )
 
 const (
@@ -36,9 +38,18 @@ var (
 // PersistentVolumeClaimPruner prunes PersistentVolumeClaims of deleted
 // StatefulSets.
 type PersistentVolumeClaimPruner struct {
-	BuilderFactory func() *resource.Builder
-	Deleter        deletions.Deleter
-	Waiter         wait.Waiter
+	Deleter       deletions.Deleter
+	DynamicClient dynamic.Interface
+	Mapper        meta.RESTMapper
+}
+
+// NewPersistentVolumeClaimPruner creates a new PersistentVolumeClaimPruner value.
+func NewPersistentVolumeClaimPruner(client dynamic.Interface, deleter deletions.Deleter, mapper meta.RESTMapper) *PersistentVolumeClaimPruner {
+	return &PersistentVolumeClaimPruner{
+		Deleter:       deleter,
+		DynamicClient: client,
+		Mapper:        mapper,
+	}
 }
 
 // Prune searches the slice of runtime objects for StatefulSets that have a
@@ -47,6 +58,11 @@ type PersistentVolumeClaimPruner struct {
 // required that the object slice only contains objects of type
 // *unstructured.Unstructured.
 func (p *PersistentVolumeClaimPruner) PruneClaims(objs []runtime.Object) error {
+	mapping, err := p.Mapper.RESTMapping(PersistentVolumeClaimGK)
+	if err != nil {
+		return err
+	}
+
 	for _, obj := range objs {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 
@@ -54,7 +70,7 @@ func (p *PersistentVolumeClaimPruner) PruneClaims(objs []runtime.Object) error {
 			continue
 		}
 
-		err := p.pruneClaims(obj)
+		err := p.pruneClaims(obj, mapping)
 		if err != nil {
 			return err
 		}
@@ -63,7 +79,7 @@ func (p *PersistentVolumeClaimPruner) PruneClaims(objs []runtime.Object) error {
 	return nil
 }
 
-func (p *PersistentVolumeClaimPruner) pruneClaims(obj runtime.Object) error {
+func (p *PersistentVolumeClaimPruner) pruneClaims(obj runtime.Object, mapping *meta.RESTMapping) error {
 	metadata, _ := meta.Accessor(obj)
 
 	annotations := metadata.GetAnnotations()
@@ -71,23 +87,24 @@ func (p *PersistentVolumeClaimPruner) pruneClaims(obj runtime.Object) error {
 		return nil
 	}
 
-	result := p.BuilderFactory().
-		Unstructured().
-		ContinueOnError().
-		NamespaceParam(metadata.GetNamespace()).DefaultNamespace().
-		ResourceTypeOrNameArgs(true, PersistentVolumeClaimGK.Kind).
-		LabelSelector(PersistentVolumeClaimSelector(metadata.GetName())).
-		Flatten().
-		Do().
-		IgnoreErrors(apierrors.IsNotFound)
-	if err := result.Err(); err != nil {
+	objs, err := p.DynamicClient.
+		Resource(mapping.Resource).
+		Namespace(metav1.NamespaceAll).
+		List(metav1.ListOptions{
+			LabelSelector: PersistentVolumeClaimSelector(metadata.GetName()),
+		})
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	return p.Deleter.Delete(&deletions.Request{
-		Waiter:  p.Waiter,
-		Visitor: result,
-	})
+	fmt.Println(objs.Items)
+
+	infos, err := resources.ToInfoList(objs, p.Mapper)
+	if err != nil {
+		return err
+	}
+
+	return p.Deleter.Delete(resource.InfoListVisitor(infos))
 }
 
 // PersistentVolumeClaimSelector returns a selector that can be used to query
