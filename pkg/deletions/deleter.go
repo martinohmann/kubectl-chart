@@ -1,8 +1,6 @@
 package deletions
 
 import (
-	"time"
-
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -104,10 +102,7 @@ func (d *deleter) Delete(v resource.Visitor) error {
 
 	err = d.Waiter.Wait(&wait.Request{
 		ConditionFn: wait.NewDeletedConditionFunc(d.DynamicClient, d.ErrOut, uidMap),
-		Options: wait.Options{
-			Timeout: 2 * time.Hour,
-		},
-		Visitor: resource.InfoListVisitor(deletedInfos),
+		Visitor:     resource.InfoListVisitor(deletedInfos),
 	})
 	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
 		// if we're forbidden from waiting, we shouldn't fail.

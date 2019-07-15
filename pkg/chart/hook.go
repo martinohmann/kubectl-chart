@@ -44,7 +44,7 @@ const (
 	AnnotationHookNoWait = "kubectl-chart/hook-no-wait"
 
 	// AnnotationHookWaitTimeout sets a custom wait timeout for a hook. If not
-	// set, DefaultHookWaitTimeout is used.
+	// set, wait.DefaultWaitTimeout is used.
 	AnnotationHookWaitTimeout = "kubectl-chart/hook-wait-timeout"
 
 	PreApplyHook   = "pre-apply"
@@ -54,10 +54,6 @@ const (
 )
 
 var (
-	// DefaultHookWaitTimeout is the timeout that is used for wait operations
-	// if it is not overridden in a hooks configuration.
-	DefaultHookWaitTimeout = 2 * time.Hour
-
 	// ValidHookTypes contains a list of supported hook types.
 	ValidHookTypes = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
 
@@ -332,7 +328,7 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 
 		options := wait.Options{
 			AllowFailure: hook.AllowFailure(),
-			Timeout:      DefaultHookWaitTimeout,
+			Timeout:      wait.DefaultWaitTimeout,
 		}
 
 		timeout, _ := hook.WaitTimeout()
@@ -380,10 +376,7 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 	}
 
 	err := e.Waiter.Wait(&wait.Request{
-		ConditionFn: wait.NewCompletionConditionFunc(e.DynamicClient, e.ErrOut),
-		Options: wait.Options{
-			Timeout: DefaultHookWaitTimeout,
-		},
+		ConditionFn:     wait.NewCompletionConditionFunc(e.DynamicClient, e.ErrOut),
 		ResourceOptions: options,
 		Visitor:         resource.InfoListVisitor(infos),
 	})

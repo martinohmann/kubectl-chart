@@ -4,12 +4,15 @@ package wait
 // added features to ensure that the waiting behaviour is similar.
 
 import (
+	"errors"
 	"io/ioutil"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,7 +35,7 @@ func newUnstructuredList(items ...*unstructured.Unstructured) *unstructured.Unst
 	return list
 }
 
-func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
+func newUnstructuredWithUID(apiVersion, kind, namespace, name, uid string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": apiVersion,
@@ -40,10 +43,14 @@ func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Uns
 			"metadata": map[string]interface{}{
 				"namespace": namespace,
 				"name":      name,
-				"uid":       "some-UID-value",
+				"uid":       uid,
 			},
 		},
 	}
+}
+
+func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
+	return newUnstructuredWithUID(apiVersion, kind, namespace, name, "some-UID-value")
 }
 
 func newUnstructuredStatus(status *metav1.Status) runtime.Unstructured {
@@ -394,7 +401,7 @@ func TestWaitForDeletion(t *testing.T) {
 			w := NewWaiter(genericclioptions.NewTestIOStreamsDiscard(), printers.NewDiscardingPrinter())
 
 			req := &Request{
-				Options: Options{
+				Options: &Options{
 					Timeout: test.timeout,
 				},
 				Visitor:     resource.InfoListVisitor(test.infos),
@@ -784,10 +791,10 @@ func TestWaitForCompletion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := test.fakeClient()
 
-			w := NewWaiter(genericclioptions.NewTestIOStreamsDiscard(), printers.NewDiscardingPrinter())
+			w := NewDefaultWaiter(genericclioptions.NewTestIOStreamsDiscard())
 
 			req := &Request{
-				Options: Options{
+				Options: &Options{
 					Timeout: test.timeout,
 				},
 				Visitor:     resource.InfoListVisitor(test.infos),
@@ -808,6 +815,204 @@ func TestWaitForCompletion(t *testing.T) {
 			}
 
 			test.validateActions(t, fakeClient.Actions())
+		})
+	}
+}
+
+func TestWait_Errors(t *testing.T) {
+	tests := []struct {
+		name        string
+		conditionFn ConditionFunc
+		options     Options
+		expectedErr string
+	}{
+		{
+			name: "forces error if condition was not satisfied and no error was returned",
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				return newUnstructured("batch", "v1", "ns-foo", "name-foo"), false, nil
+			},
+			expectedErr: "&{map[apiVersion:batch kind:v1 metadata:map[name:name-foo namespace:ns-foo uid:some-UID-value]]} unsatisified for unknown reason",
+		},
+		{
+			name: "does not ignore WaitTimeoutError if AllowFailure is not set",
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				err := &WaitTimeoutError{
+					Name:     "foo",
+					Resource: "jobs",
+					Err:      errors.New("foobar"),
+				}
+				return nil, false, err
+			},
+			expectedErr: "foobar on jobs/foo",
+		},
+		{
+			name: "ignores WaitTimeoutError if AllowFailure is set",
+			options: Options{
+				AllowFailure: true,
+			},
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				err := &WaitTimeoutError{
+					Name:     "foo",
+					Resource: "jobs",
+					Err:      errors.New("foobar"),
+				}
+				return nil, false, err
+			},
+		},
+		{
+			name: "does not ignore StatusFailedError if AllowFailure is not set",
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				err := &StatusFailedError{
+					Name: "foo",
+					GroupVersionKind: schema.GroupVersionKind{
+						Group:   "batch",
+						Version: "v1",
+						Kind:    "Job",
+					},
+				}
+				return nil, false, err
+			},
+			expectedErr: `batch/v1, Kind=Job "foo" is in status failed`,
+		},
+		{
+			name: "ignores StatusFailedError if AllowFailure is set",
+			options: Options{
+				AllowFailure: true,
+			},
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				err := &StatusFailedError{
+					Name: "foo",
+					GroupVersionKind: schema.GroupVersionKind{
+						Group:   "batch",
+						Version: "v1",
+						Kind:    "Job",
+					},
+				}
+				return nil, false, err
+			},
+		},
+		{
+			name: "ignores WaitSkippedError",
+			conditionFn: func(info *resource.Info, o Options) (runtime.Object, bool, error) {
+				err := &WaitSkippedError{
+					Name: "foo",
+					GroupVersionKind: schema.GroupVersionKind{
+						Group:   "batch",
+						Version: "v1",
+						Kind:    "Job",
+					},
+				}
+				return nil, false, err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := NewDefaultWaiter(genericclioptions.NewTestIOStreamsDiscard())
+
+			req := &Request{
+				Options: &test.options,
+				Visitor: resource.InfoListVisitor([]*resource.Info{
+					{Object: newUnstructured("batch/v1", "Job", "ns-foo", "name-foo")},
+				}),
+				ConditionFn: test.conditionFn,
+			}
+
+			err := w.Wait(req)
+			if test.expectedErr != "" {
+				require.Error(t, err)
+				assert.Equal(t, test.expectedErr, err.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestRequest_OptionsFor(t *testing.T) {
+	tests := []struct {
+		name            string
+		options         *Options
+		resourceOptions ResourceOptions
+		obj             runtime.Object
+		validate        func(t *testing.T, opts Options)
+	}{
+		{
+			name: "falls back to default options if no resource options are defined",
+			obj:  newUnstructuredWithUID("batch/v1", "job", "ns-foo", "name-foo", ""),
+			validate: func(t *testing.T, opts Options) {
+				assert.Equal(t, DefaultOptions, opts)
+			},
+		},
+		{
+			name: "falls back to default options if no resource options are defined for UID",
+			obj:  newUnstructuredWithUID("batch/v1", "job", "ns-foo", "name-foo", "the-uid"),
+			resourceOptions: ResourceOptions{
+				"other-uid": Options{
+					Timeout:      10 * time.Second,
+					AllowFailure: true,
+				},
+			},
+			validate: func(t *testing.T, opts Options) {
+				assert.Equal(t, DefaultOptions, opts)
+			},
+		},
+		{
+			name: "uses options for UID",
+			obj:  newUnstructuredWithUID("batch/v1", "job", "ns-foo", "name-foo", "the-uid"),
+			resourceOptions: ResourceOptions{
+				"the-uid": Options{
+					Timeout:      20 * time.Second,
+					AllowFailure: true,
+				},
+			},
+			validate: func(t *testing.T, opts Options) {
+				assert.Equal(t, 20*time.Second, opts.Timeout)
+				assert.True(t, opts.AllowFailure)
+			},
+		},
+		{
+			name: "does not fall back to default options if options are defined",
+			obj:  newUnstructuredWithUID("batch/v1", "job", "ns-foo", "name-foo", "the-uid"),
+			options: &Options{
+				Timeout:      10 * time.Second,
+				AllowFailure: true,
+			},
+			validate: func(t *testing.T, opts Options) {
+				assert.Equal(t, 10*time.Second, opts.Timeout)
+				assert.True(t, opts.AllowFailure)
+			},
+		},
+		{
+			name: "resource options have precedence",
+			obj:  newUnstructuredWithUID("batch/v1", "job", "ns-foo", "name-foo", "the-uid"),
+			resourceOptions: ResourceOptions{
+				"the-uid": Options{
+					Timeout:      5 * time.Minute,
+					AllowFailure: true,
+				},
+			},
+			options: &Options{
+				Timeout: 10 * time.Second,
+			},
+			validate: func(t *testing.T, opts Options) {
+				assert.Equal(t, 5*time.Minute, opts.Timeout)
+				assert.True(t, opts.AllowFailure)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &Request{
+				Options:         test.options,
+				ResourceOptions: test.resourceOptions,
+			}
+
+			opts := r.OptionsFor(&resource.Info{Object: test.obj})
+
+			test.validate(t, opts)
 		})
 	}
 }
