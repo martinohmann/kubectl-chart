@@ -48,7 +48,6 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	o.PrintFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
-	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, all resources matching the chart selector will be pruned, even those previously removed from the chart.")
 
 	return cmd
 }
@@ -60,7 +59,6 @@ type DeleteOptions struct {
 	HookFlags  HookFlags
 	PrintFlags PrintFlags
 	DryRun     bool
-	Prune      bool
 
 	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
@@ -141,29 +139,18 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		builder := o.BuilderFactory().
-			Unstructured().
-			ContinueOnError()
+		chart.SortResources(c.Resources, chart.DeleteOrder)
 
-		if o.Prune {
-			builder = builder.
-				AllNamespaces(true).
-				ResourceTypeOrNameArgs(false, "all").
-				LabelSelector(c.LabelSelector())
-		} else {
-			chart.SortResources(c.Resources, chart.DeleteOrder)
-
-			buf, err := o.Serializer.Encode(c.Resources.GetObjects())
-			if err != nil {
-				return err
-			}
-
-			builder = builder.
-				NamespaceParam(o.Namespace).DefaultNamespace().
-				Stream(bytes.NewBuffer(buf), c.Config.Name)
+		buf, err := o.Serializer.Encode(c.Resources.GetObjects())
+		if err != nil {
+			return err
 		}
 
-		result := builder.
+		result := o.BuilderFactory().
+			Unstructured().
+			ContinueOnError().
+			NamespaceParam(o.Namespace).DefaultNamespace().
+			Stream(bytes.NewBuffer(buf), c.Config.Name).
 			Flatten().
 			Do().
 			IgnoreErrors(errors.IsNotFound)
