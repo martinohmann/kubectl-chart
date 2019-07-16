@@ -256,7 +256,7 @@ type HookExecutor struct {
 	Mapper        meta.RESTMapper
 	Deleter       deletions.Deleter
 	Waiter        wait.Waiter
-	Printer       printers.OperationPrinter
+	Printer       printers.ContextPrinter
 	DryRun        bool
 }
 
@@ -393,8 +393,6 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 
 // PrintHook prints a hooks.
 func (e *HookExecutor) PrintHook(hook *Hook) error {
-	operation := "triggered"
-
 	options := make([]string, 0)
 
 	if timeout, _ := hook.WaitTimeout(); timeout > 0 {
@@ -409,9 +407,8 @@ func (e *HookExecutor) PrintHook(hook *Hook) error {
 		options = append(options, "allow-failure")
 	}
 
-	if len(options) > 0 {
-		operation = fmt.Sprintf("%s (%s)", operation, strings.Join(options, ","))
-	}
-
-	return e.Printer.WithOperation(operation).PrintObj(hook, e.Out)
+	return e.Printer.
+		WithOperation("triggered").
+		WithContext(options...).
+		PrintObj(hook, e.Out)
 }

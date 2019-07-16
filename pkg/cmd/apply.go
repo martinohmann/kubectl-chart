@@ -78,7 +78,7 @@ type ApplyOptions struct {
 	ServerDryRun bool
 	ShowDiff     bool
 
-	Printer         printers.OperationPrinter
+	Printer         printers.ContextPrinter
 	Recorder        recorders.OperationRecorder
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface

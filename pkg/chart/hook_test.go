@@ -404,7 +404,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				Waiter:        waiter,
 				Mapper:        testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme),
 				DynamicClient: fakeClient,
-				Printer:       printers.NewDiscardingOperationPrinter(),
+				Printer:       printers.NewDiscardingContextPrinter(),
 				DryRun:        tc.dryRun,
 			}
 

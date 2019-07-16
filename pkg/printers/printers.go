@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
@@ -17,9 +18,18 @@ type ResourcePrinter interface {
 	PrintObj(obj runtime.Object, w io.Writer) error
 }
 
-type OperationPrinter interface {
+// ContextPrinter is a ResourcePrinter that can add context to printed object
+// information.
+type ContextPrinter interface {
 	ResourcePrinter
-	WithOperation(operation string) OperationPrinter
+
+	// WithOperation returns a new ContextPrinter for operation. The receiver
+	// must not be mutated.
+	WithOperation(operation string) ContextPrinter
+
+	// WithContext returns a new ContextPrinter with the context values set.
+	// The receiver must not be mutated.
+	WithContext(context ...string) ContextPrinter
 }
 
 // RecordingPrinter records all objects it prints.
@@ -47,62 +57,35 @@ func (p *RecordingPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	return p.Printer.PrintObj(obj, w)
 }
 
-// NewNamePrinter creates a new name printer which annotates the printed names
-// with "(dry run)" if dry run is enabled.
-func NewNamePrinter(operation string, dryRun bool) *printers.NamePrinter {
-	if dryRun {
-		operation = fmt.Sprintf("%s (dry run)", operation)
-	}
-
-	return &printers.NamePrinter{Operation: operation}
-}
-
 type colorFunc func(format string, a ...interface{}) string
 
-var (
-	colorMap = map[string]colorFunc{
-		"created":    color.GreenString,
-		"deleted":    color.RedString,
-		"pruned":     color.RedString,
-		"triggered":  color.CyanString,
-		"configured": color.YellowString,
-	}
-
-	operationPrefix = map[string]string{
-		"created":    "+",
-		"deleted":    "-",
-		"pruned":     "-",
-		"triggered":  "^",
-		"configured": "~",
-	}
-)
+var colorMap = map[string]colorFunc{
+	"created":    color.GreenString,
+	"deleted":    color.RedString,
+	"pruned":     color.RedString,
+	"triggered":  color.CyanString,
+	"configured": color.YellowString,
+}
 
 type colorPrinter struct {
 	delegate ResourcePrinter
 	colorFn  colorFunc
-	prefix   string
 }
 
 // NewColorPrinter wraps delegate with a color printer for given operation.
 func NewColorPrinter(delegate ResourcePrinter, operation string) ResourcePrinter {
-	colorFn, ok := colorMap[operation]
-	if !ok {
+	colorFn := colorMap[operation]
+	if colorFn == nil {
 		colorFn = fmt.Sprintf
-	}
-
-	prefix, ok := operationPrefix[operation]
-	if !ok {
-		prefix = " "
 	}
 
 	return &colorPrinter{
 		delegate: delegate,
 		colorFn:  colorFn,
-		prefix:   prefix,
 	}
 }
 
-// PrintObj implements ResourcePrinter
+// PrintObj implements ResourcePrinter.
 func (p *colorPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 	var buf bytes.Buffer
 
@@ -111,58 +94,80 @@ func (p *colorPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 		return err
 	}
 
-	colored := p.colorFn("%s %s", p.prefix, buf.String())
-
-	_, err = w.Write([]byte(colored))
+	_, err = w.Write([]byte(p.colorFn(buf.String())))
 
 	return err
 }
 
-var _ OperationPrinter = &operationPrinter{}
-var _ OperationPrinter = &discardingOperationPrinter{}
-
-type operationPrinter struct {
+type contextPrinter struct {
 	ResourcePrinter
 	operation string
+	context   []string
 	color     bool
 	dryRun    bool
 }
 
-func NewOperationPrinter(color, dryRun bool) OperationPrinter {
-	return newOperationPrinter("", color, dryRun)
+// NewContextPrinter creates a new ContextPrinter.
+func NewContextPrinter(color, dryRun bool) ContextPrinter {
+	return newContextPrinter("", nil, color, dryRun)
 }
 
-func newOperationPrinter(operation string, color, dryRun bool) OperationPrinter {
+func newContextPrinter(operation string, context []string, color, dryRun bool) ContextPrinter {
 	var p ResourcePrinter
 
-	p = NewNamePrinter(operation, dryRun)
+	operationInfo := operation
+
+	if len(context) > 0 {
+		operationInfo = fmt.Sprintf("%s (%s)", operation, strings.Join(context, ","))
+	}
+
+	if dryRun {
+		operationInfo = fmt.Sprintf("%s (dry run)", operationInfo)
+	}
+
+	p = &printers.NamePrinter{
+		Operation: strings.TrimSpace(operationInfo),
+	}
 
 	if color {
 		p = NewColorPrinter(p, operation)
 	}
 
-	return &operationPrinter{
+	return &contextPrinter{
 		ResourcePrinter: p,
 		operation:       operation,
+		context:         context,
 		color:           color,
 		dryRun:          dryRun,
 	}
 }
 
-func (p *operationPrinter) WithOperation(operation string) OperationPrinter {
-	return newOperationPrinter(operation, p.color, p.dryRun)
+// WithOperation implements WithOperation from the ContextPrinter interface.
+func (p contextPrinter) WithOperation(operation string) ContextPrinter {
+	return newContextPrinter(operation, p.context, p.color, p.dryRun)
 }
 
-type discardingOperationPrinter struct{}
-
-func NewDiscardingOperationPrinter() OperationPrinter {
-	return &discardingOperationPrinter{}
+// WithContext implements WithContext from the ContextPrinter interface.
+func (p contextPrinter) WithContext(context ...string) ContextPrinter {
+	return newContextPrinter(p.operation, context, p.color, p.dryRun)
 }
 
-func (p *discardingOperationPrinter) WithOperation(string) OperationPrinter {
+type discardingContextPrinter struct {
+	ResourcePrinter
+}
+
+// NewDiscardingContextPrinter creates a ContextPrinter that just discards
+// everything.
+func NewDiscardingContextPrinter() ContextPrinter {
+	return &discardingContextPrinter{printers.NewDiscardingPrinter()}
+}
+
+// WithOperation implements WithOperation from the ContextPrinter interface.
+func (p discardingContextPrinter) WithOperation(string) ContextPrinter {
 	return p
 }
 
-func (p *discardingOperationPrinter) PrintObj(runtime.Object, io.Writer) error {
-	return nil
+// WithContext implements WithContext from the ContextPrinter interface.
+func (p discardingContextPrinter) WithContext(...string) ContextPrinter {
+	return p
 }

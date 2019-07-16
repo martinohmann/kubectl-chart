@@ -80,6 +80,6 @@ func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&f.NoColor, "no-color", f.NoColor, "If set, output will not be colored")
 }
 
-func (f *PrintFlags) ToPrinter(dryRun bool) printers.OperationPrinter {
-	return printers.NewOperationPrinter(!f.NoColor, dryRun)
+func (f *PrintFlags) ToPrinter(dryRun bool) printers.ContextPrinter {
+	return printers.NewContextPrinter(!f.NoColor, dryRun)
 }
