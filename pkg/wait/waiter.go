@@ -30,8 +30,10 @@ type ResourceOptions map[types.UID]Options
 
 // Request is a request to wait for multiple resources.
 type Request struct {
-	// Options are options for waiting on resource conditions to meet.
-	Options Options
+	// Options are options for waiting on resource conditions to meet. If nil,
+	// DefaultOptions will be used.
+	Options *Options
+
 	// ResourceOptions is a map with Resource UIDs as keys. This allows
 	// fine-grained configuration of per-resource wait options. This is
 	// optional.
@@ -43,6 +45,16 @@ type Request struct {
 	// Visitor will be used to walk the resources that should be waited on.
 	Visitor resource.Visitor
 }
+
+var (
+	// DefaultWaitTimeout is the timeout that is used for wait operations
+	// if it is not overridden in the ResourceOptions for a given UID.
+	DefaultWaitTimeout = 2 * time.Hour
+
+	// DefaultOptions are used for wait operations that do not set Options in a
+	// request.
+	DefaultOptions = Options{Timeout: DefaultWaitTimeout}
+)
 
 // Waiter waits for a condition to meet.
 type Waiter interface {
@@ -66,7 +78,11 @@ func (r *Request) OptionsFor(info *resource.Info) Options {
 		}
 	}
 
-	return r.Options
+	if r.Options != nil {
+		return *r.Options
+	}
+
+	return DefaultOptions
 }
 
 // ResourceLocation holds the location of a resource.
@@ -130,6 +146,12 @@ func (w *waiter) Wait(r *Request) error {
 		statusError, ok := err.(*StatusFailedError)
 		if ok && statusError != nil && options.AllowFailure {
 			fmt.Fprintln(w.ErrOut, statusError.Error())
+			return nil
+		}
+
+		timeoutError, ok := err.(*WaitTimeoutError)
+		if ok && timeoutError != nil && options.AllowFailure {
+			fmt.Fprintln(w.ErrOut, timeoutError.Error())
 			return nil
 		}
 

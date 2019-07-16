@@ -12,7 +12,7 @@ func TestFakeWaiter_Wait(t *testing.T) {
 	w := NewFakeWaiter()
 
 	r1 := &Request{
-		Options: Options{Timeout: 1 * time.Second},
+		Options: &Options{Timeout: 1 * time.Second},
 	}
 
 	err := w.Wait(r1)

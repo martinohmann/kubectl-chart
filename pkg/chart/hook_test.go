@@ -315,7 +315,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 					t.Fatal(spew.Sdump(reqs[0].ResourceOptions))
 				}
 
-				require.Equal(t, DefaultHookWaitTimeout, reqs[0].ResourceOptions["some-uid"].Timeout)
+				require.Equal(t, wait.DefaultWaitTimeout, reqs[0].ResourceOptions["some-uid"].Timeout)
 			},
 		},
 		{
