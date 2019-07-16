@@ -1,6 +1,8 @@
 package deletions
 
 import (
+	"fmt"
+
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,7 +53,9 @@ func (d *deleter) Delete(v resource.Visitor) error {
 	uidMap := wait.UIDMap{}
 
 	err := v.Visit(func(info *resource.Info, err error) error {
-		if err != nil {
+		if errors.IsNotFound(err) {
+			fmt.Fprintln(d.ErrOut, err)
+		} else if err != nil {
 			return err
 		}
 
