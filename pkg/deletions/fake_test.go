@@ -40,7 +40,7 @@ func TestFakeDeleter_Delete(t *testing.T) {
 type errorVisitor struct{}
 
 func (*errorVisitor) Visit(fn resource.VisitorFunc) error {
-	return errors.New("whoops")
+	return fn(nil, errors.New("whoops"))
 }
 
 func TestFakeDeleter_DeleteForwardVisitorErrors(t *testing.T) {

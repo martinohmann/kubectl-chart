@@ -47,8 +47,6 @@ func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, p
 
 // Delete implements Deleter.
 func (d *deleter) Delete(v resource.Visitor) error {
-	found := 0
-
 	deletedInfos := []*resource.Info{}
 	uidMap := wait.UIDMap{}
 
@@ -58,9 +56,6 @@ func (d *deleter) Delete(v resource.Visitor) error {
 		} else if err != nil {
 			return err
 		}
-
-		deletedInfos = append(deletedInfos, info)
-		found++
 
 		if d.DryRun {
 			_, err := d.getResource(info)
@@ -75,6 +70,8 @@ func (d *deleter) Delete(v resource.Visitor) error {
 		if err != nil {
 			return err
 		}
+
+		deletedInfos = append(deletedInfos, info)
 
 		d.Printer.PrintObj(info.Object, d.Out)
 
@@ -96,11 +93,13 @@ func (d *deleter) Delete(v resource.Visitor) error {
 
 		return nil
 	})
-	if (err != nil && !errors.IsNotFound(err)) || found == 0 {
+	if errors.IsNotFound(err) {
+		fmt.Fprintln(d.ErrOut, err)
+	} else if err != nil {
 		return err
 	}
 
-	if d.Waiter == nil || d.DryRun {
+	if d.DryRun || d.Waiter == nil || len(deletedInfos) == 0 {
 		return nil
 	}
 
