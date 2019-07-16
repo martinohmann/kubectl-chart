@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -79,6 +78,7 @@ type ApplyOptions struct {
 	ServerDryRun bool
 	ShowDiff     bool
 
+	Printer         printers.ContextPrinter
 	Recorder        recorders.OperationRecorder
 	DynamicClient   dynamic.Interface
 	DiscoveryClient discovery.CachedDiscoveryInterface
@@ -153,18 +153,28 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, o.DryRun || o.ServerDryRun)
+	dryRun := o.DryRun || o.ServerDryRun
+
+	o.Printer = o.DiffFlags.PrintFlags.ToPrinter(dryRun)
+
+	o.Deleter = deletions.NewDeleter(
+		o.IOStreams,
+		o.DynamicClient,
+		o.Printer.WithOperation("deleted"),
+		dryRun,
+	)
 
 	if o.HookFlags.NoHooks {
 		o.HookExecutor = &hooks.NoopExecutor{}
 	} else {
 		o.HookExecutor = &chart.HookExecutor{
 			IOStreams:     o.IOStreams,
-			DryRun:        o.DryRun || o.ServerDryRun,
+			DryRun:        dryRun,
 			DynamicClient: o.DynamicClient,
 			Mapper:        o.Mapper,
 			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
 			Deleter:       o.Deleter,
+			Printer:       o.Printer,
 		}
 	}
 
@@ -273,14 +283,11 @@ func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.App
 		Prune:        true,
 		Selector:     c.LabelSelector(),
 		DeleteOptions: &delete.DeleteOptions{
-			Cascade:         true,
-			GracePeriod:     -1,
-			ForceDeletion:   false,
-			Timeout:         time.Duration(0),
-			WaitForDeletion: false,
+			Cascade:     true,
+			GracePeriod: -1,
+			Timeout:     time.Duration(0),
 			FilenameOptions: resource.FilenameOptions{
 				Filenames: []string{filename},
-				Recursive: false,
 			},
 		},
 		PrintFlags:       genericclioptions.NewPrintFlags(""),
@@ -294,15 +301,7 @@ func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.App
 		Namespace:        o.Namespace,
 		EnforceNamespace: o.EnforceNamespace,
 		ToPrinter: func(operation string) (kprinters.ResourcePrinter, error) {
-			printOperation := operation
-			if o.DryRun {
-				printOperation = fmt.Sprintf("%s (dry run)", operation)
-			}
-			if o.ServerDryRun {
-				printOperation = fmt.Sprintf("%s (server dry run)", operation)
-			}
-
-			p := &kprinters.NamePrinter{Operation: printOperation}
+			p := o.Printer.WithOperation(operation)
 
 			// Wrap the printer to keep track of the executed operations for
 			// each object. We need that later on to perform additonal tasks.

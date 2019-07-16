@@ -30,8 +30,8 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 		Example: `  # Diff a single chart
   kubectl chart diff --chart-dir ~/charts/mychart
 
-  # Diff multiple charts with custom diff context
-  kubectl chart diff --chart-dir ~/charts --recursive --diff-context 20`,
+  # Diff multiple charts with custom diff context and no coloring
+  kubectl chart diff --chart-dir ~/charts --recursive --diff-context 20 --no-color`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
