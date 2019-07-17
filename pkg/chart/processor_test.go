@@ -63,9 +63,8 @@ func TestProcessor_Process(t *testing.T) {
 					"apiVersion": "apps/v1",
 					"kind":       "StatefulSet",
 					"metadata": map[string]interface{}{
-						"name":              "foobar-chart1",
-						"namespace":         "foo",
-						"creationTimestamp": nil,
+						"name":      "foobar-chart1",
+						"namespace": "foo",
 						"labels": map[string]interface{}{
 							LabelChartName: "foobar",
 						},
@@ -80,35 +79,22 @@ func TestProcessor_Process(t *testing.T) {
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
-								"creationTimestamp": nil,
 								"labels": map[string]interface{}{
 									"foo":                   "bar",
 									LabelOwnedByStatefulSet: "foobar-chart1",
 								},
 							},
-							"spec": map[string]interface{}{
-								"containers": nil,
-							},
 						},
-						"updateStrategy": map[string]interface{}{},
 						"volumeClaimTemplates": []interface{}{
 							map[string]interface{}{
 								"metadata": map[string]interface{}{
-									"name":              "baz",
-									"creationTimestamp": nil,
+									"name": "baz",
 									"labels": map[string]interface{}{
 										LabelOwnedByStatefulSet: "foobar-chart1",
 									},
 								},
-								"spec": map[string]interface{}{
-									"resources": map[string]interface{}{},
-								},
-								"status": map[string]interface{}{},
 							},
 						},
-					},
-					"status": map[string]interface{}{
-						"replicas": int64(0),
 					},
 				},
 			},
