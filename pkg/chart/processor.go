@@ -66,12 +66,16 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 			return nil, nil, errors.Wrapf(err, "while parsing template %q", name)
 		}
 
-		err = LabelStatefulSets(resourceObjs)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		for _, obj := range resourceObjs {
+			gvk := obj.GetObjectKind().GroupVersionKind()
+
+			if gvk.GroupKind() == statefulSetGK {
+				err = labelStatefulSet(obj)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+
 			r := NewResource(obj)
 			r.SetLabel(LabelChartName, config.Name)
 			r.DefaultNamespace(config.Namespace)

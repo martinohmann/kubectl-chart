@@ -16,7 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
@@ -24,29 +23,6 @@ import (
 )
 
 const (
-	// AnnotationHookType contains the type of the hook. If this annotation is
-	// set on a Job it will be treated as a hook and not show up as regular
-	// resource anymore.
-	AnnotationHookType = "kubectl-chart/hook-type"
-
-	// AnnotationHookAllowFailure controls the behaviour in the event where the
-	// hook fails due to timeouts or because the job failed. If set to "true",
-	// these errors just will be logged and processing of other hooks and
-	// resources continues. Other unhandled errors occuring during hook
-	// execution (e.g. API-Server errors) will still bubble up the error
-	// handling chain.
-	AnnotationHookAllowFailure = "kubectl-chart/hook-allow-failure"
-
-	// AnnotationHookNoWait controls the waiting behaviour. If set to "true",
-	// it is not waited for the hook to complete. This cannot be used together
-	// with AnnotationHookAllowFailure because the success of a hook is not
-	// checked if we do not wait for it to finish.
-	AnnotationHookNoWait = "kubectl-chart/hook-no-wait"
-
-	// AnnotationHookWaitTimeout sets a custom wait timeout for a hook. If not
-	// set, wait.DefaultWaitTimeout is used.
-	AnnotationHookWaitTimeout = "kubectl-chart/hook-wait-timeout"
-
 	PreApplyHook   = "pre-apply"
 	PostApplyHook  = "post-apply"
 	PreDeleteHook  = "pre-delete"
@@ -56,9 +32,6 @@ const (
 var (
 	// ValidHookTypes contains a list of supported hook types.
 	ValidHookTypes = []string{PreApplyHook, PostApplyHook, PreDeleteHook, PostDeleteHook}
-
-	jobGK  = schema.GroupKind{Group: "batch", Kind: "Job"}
-	jobGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 )
 
 // Hook is a chart hook that gets executed before or after apply/delete
