@@ -5,6 +5,10 @@ go: 1.12
 env:
   global:
     - GO111MODULE=on
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
 script:
   - make vet
   - make coverage
