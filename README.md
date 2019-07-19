@@ -42,13 +42,15 @@ Features
 - Simple chart lifecycle hooks (similar to helm hooks)
 - Configurable pruning of PVC of deleted StatefulSets
 - Dumping of merged chart values for debugging
+- Color indicators for printed resource operations to increase visibility
 
 Roadmap / Planned features
 --------------------------
 
 - Full integration test coverage
 - Listing all deployed resources of a chart (similar to `kubectl get all` with filter)
-- Color indicators for printed resource operations to increase visibility
+- Delete chart resources by selector
+- Automatic PersistentVolumeClaim resizing
 - Optional rollback of partially applied changes on failure
 
 Installation
@@ -90,37 +92,37 @@ Usage examples
 Diff chart:
 
 ```
-kubectl chart diff --chart-dir path/to/chart
+kubectl chart diff -f path/to/chart
 ```
 
 Diff all charts in a directory:
 
 ```
-kubectl chart diff --chart-dir path/to/charts -R
+kubectl chart diff -f path/to/charts -R
 ```
 
 Dry run apply with chart value overrides:
 
 ```
-kubectl chart apply --chart-dir path/to/chart --server-dry-run --value-file path/to/values.yaml
+kubectl chart apply -f path/to/chart --server-dry-run --values path/to/values.yaml
 ```
 
 Dry run delete charts by filter:
 
 ```
-kubectl chart delete --chart-dir path/to/charts -R --chart-filter chart1,chart3 --dry-run
+kubectl chart delete -f path/to/charts -R --chart-filter chart1,chart3 --dry-run
 ```
 
 Render chart:
 
 ```
-kubectl chart render --chart-dir path/to/chart
+kubectl chart render -f path/to/chart
 ```
 
 Render chart hooks:
 
 ```
-kubectl chart render --chart-dir path/to/chart --hook all
+kubectl chart render -f path/to/chart --hook-type all
 ```
 
 How does it work?

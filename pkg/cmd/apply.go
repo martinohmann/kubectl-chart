@@ -35,19 +35,19 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 		Short: "Apply resources from one or multiple helm charts",
 		Long:  "Apply renders the resources of one or multiple helm charts and applies them to a cluster.",
 		Example: `  # Render and apply a single chart
-  kubectl chart apply --chart-dir ~/charts/mychart
+  kubectl chart apply -f ~/charts/mychart
 
   # Render and apply multiple charts with additional values merged
-  kubectl chart apply --chart-dir ~/charts --recursive --value-file ~/some/additional/values.yaml
+  kubectl chart apply -f ~/charts --recursive --values ~/some/additional/values.yaml
 
   # Dry run apply and print resource diffs
-  kubectl chart apply --chart-dir ~/charts/mychart --diff --server-dry-run
+  kubectl chart apply -f ~/charts/mychart --diff --server-dry-run
 
   # Render and apply multiple charts with a chart filter
-  kubectl chart apply --chart-dir ~/charts --recursive --chart-filter mychart
+  kubectl chart apply -f ~/charts --recursive --chart-filter mychart
 
   # Skip executing pre and post-apply hooks
-  kubectl chart apply --chart-dir ~/charts/mychart --no-hooks`,
+  kubectl chart apply -f ~/charts/mychart --no-hooks`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))

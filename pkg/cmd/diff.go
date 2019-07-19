@@ -28,10 +28,10 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 		Short: "Diff resources from one or multiple helm charts",
 		Long:  "Diffs resources of one or multiple helm charts against the live objects in the cluster.",
 		Example: `  # Diff a single chart
-  kubectl chart diff --chart-dir ~/charts/mychart
+  kubectl chart diff -f ~/charts/mychart
 
   # Diff multiple charts with custom diff context and no coloring
-  kubectl chart diff --chart-dir ~/charts --recursive --diff-context 20 --no-color`,
+  kubectl chart diff -f ~/charts --recursive --diff-context 20 --no-color`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
