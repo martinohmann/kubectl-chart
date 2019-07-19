@@ -17,10 +17,10 @@ type ChartFlags struct {
 }
 
 func (f *ChartFlags) AddFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&f.ChartDir, "chart-dir", f.ChartDir, "Directory of the helm chart that should be rendered. If not set the current directory is assumed")
+	cmd.Flags().StringVarP(&f.ChartDir, "chart-dir", "f", f.ChartDir, "Directory of the helm chart that should be rendered. If not set the current directory is assumed")
 	cmd.Flags().StringSliceVar(&f.ChartFilter, "chart-filter", f.ChartFilter, "If set only render filtered charts")
 	cmd.Flags().BoolVarP(&f.Recursive, "recursive", "R", f.Recursive, "If set all charts in --chart-dir will be recursively rendered")
-	cmd.Flags().StringArrayVar(&f.ValueFiles, "value-file", f.ValueFiles, "File that should be merged onto the chart values before rendering")
+	cmd.Flags().StringArrayVar(&f.ValueFiles, "values", f.ValueFiles, "File that should be merged onto the chart values before rendering")
 }
 
 func (f *ChartFlags) ToVisitor(namespace string) (chart.Visitor, error) {

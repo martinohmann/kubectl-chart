@@ -26,16 +26,16 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 		Short: "Delete resources from one or multiple helm charts",
 		Long:  "Deletes resources of one or multiple helm charts from a cluster.",
 		Example: `  # Delete resources of a single chart
-  kubectl chart delete --chart-dir ~/charts/mychart
+  kubectl chart delete -f ~/charts/mychart
 
   # Delete resources of multiple charts
-  kubectl chart delete --chart-dir ~/charts --recursive
+  kubectl chart delete -f ~/charts --recursive
 
   # Dry run resource deletion
-  kubectl chart delete --chart-dir ~/charts/mychart --dry-run
+  kubectl chart delete -f ~/charts/mychart --dry-run
 
   # Skip executing pre and post-delete hooks
-  kubectl chart delete --chart-dir ~/charts/mychart --no-hooks`,
+  kubectl chart delete -f ~/charts/mychart --no-hooks`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))

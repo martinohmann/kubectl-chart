@@ -19,16 +19,16 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 		Short: "Render resources from one or multiple helm charts",
 		Long:  "Renders resources of one or multiple helm charts. This can be used to preview the manifests that are sent to the cluster.",
 		Example: `  # Render a single chart
-  kubectl chart render --chart-dir ~/charts/mychart
+  kubectl chart render -f ~/charts/mychart
 
   # Render multiple charts
-  kubectl chart render --chart-dir ~/charts --recursive
+  kubectl chart render -f ~/charts --recursive
 
   # Render chart hooks
-  kubectl chart render --chart-dir ~/charts/mychart --hook pre-apply
+  kubectl chart render -f ~/charts/mychart --hook-type pre-apply
 
   # Render all chart hooks
-  kubectl chart render --chart-dir ~/charts --recursive --hook all`,
+  kubectl chart render -f ~/charts --recursive --hook-type all`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
@@ -39,7 +39,7 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 	o.ChartFlags.AddFlags(cmd)
 
-	cmd.Flags().StringVar(&o.HookType, "hook", o.HookType, "If provided hooks with given type will be rendered")
+	cmd.Flags().StringVar(&o.HookType, "hook-type", o.HookType, "If provided hooks with given type will be rendered")
 
 	return cmd
 }
