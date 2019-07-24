@@ -4,7 +4,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/martinohmann/kubectl-chart/pkg/hook"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Processor type processes a chart config and renders the contained resources.
@@ -49,9 +52,9 @@ func (p *Processor) Process(config *Config) (*Chart, error) {
 	return c, nil
 }
 
-func (p *Processor) parseTemplates(config *Config, templates map[string]string) (ResourceList, HookMap, error) {
-	resourceList := make(ResourceList, 0)
-	hookMap := make(HookMap)
+func (p *Processor) parseTemplates(config *Config, templates map[string]string) ([]runtime.Object, hook.Map, error) {
+	resourceList := make([]runtime.Object, 0)
+	hookMap := make(hook.Map)
 
 	for name, content := range templates {
 		base := filepath.Base(name)
@@ -67,6 +70,9 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 		}
 
 		for _, obj := range resourceObjs {
+			defaultNamespace(obj, config.Namespace)
+			setLabel(obj, LabelChartName, config.Name)
+
 			gvk := obj.GetObjectKind().GroupVersionKind()
 
 			if gvk.GroupKind() == statefulSetGK {
@@ -76,33 +82,24 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 				}
 			}
 
-			r := NewResource(obj)
-			r.SetLabel(LabelChartName, config.Name)
-			r.DefaultNamespace(config.Namespace)
-
-			resourceList = append(resourceList, r)
+			resourceList = append(resourceList, obj)
 		}
 
 		for _, obj := range hookObjs {
-			h := NewHook(obj)
-
-			if err := ValidateHook(h); err != nil {
+			h, err := hook.New(obj)
+			if err != nil {
 				return nil, nil, err
 			}
 
-			h.SetLabel(LabelHookChartName, config.Name)
-			h.SetLabel(LabelHookType, h.Type())
-			h.DefaultNamespace(config.Namespace)
+			setLabel(obj, hook.LabelHookChartName, config.Name)
+			setLabel(obj, hook.LabelHookType, h.Type())
+			defaultNamespace(obj, config.Namespace)
 
-			if hookMap[h.Type()] == nil {
-				hookMap[h.Type()] = HookList{h}
-			} else {
-				hookMap[h.Type()] = append(hookMap[h.Type()], h)
-			}
+			hookMap.Add(h)
 		}
 	}
 
-	SortResources(resourceList, ApplyOrder)
+	resources.SortByKind(resourceList, resources.ApplyOrder)
 
 	return resourceList, hookMap, nil
 }

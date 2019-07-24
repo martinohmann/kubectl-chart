@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
+	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +40,7 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 	o.ChartFlags.AddFlags(cmd)
 
-	cmd.Flags().StringVar(&o.HookType, "hook-type", o.HookType, "If provided hooks with given type will be rendered")
+	cmd.Flags().StringVar(&o.HookType, "hook-type", o.HookType, "If provided hooks with given type will be rendered. Specify 'all' to render all hooks.")
 
 	return cmd
 }
@@ -62,8 +63,8 @@ func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 }
 
 func (o *RenderOptions) Validate() error {
-	if o.HookType != "" && o.HookType != "all" && !chart.IsValidHookType(o.HookType) {
-		return chart.HookTypeError{Type: o.HookType, Additional: []string{"all"}}
+	if o.HookType != "" && o.HookType != "all" && !hook.IsSupportedType(o.HookType) {
+		return hook.UnsupportedTypeError{Type: o.HookType}
 	}
 
 	return nil
@@ -101,12 +102,12 @@ func (o *RenderOptions) Run() error {
 
 func (o *RenderOptions) selectResources(c *chart.Chart) []runtime.Object {
 	if o.HookType == "" {
-		return c.Resources.GetObjects()
+		return c.Resources
 	}
 
 	if o.HookType == "all" {
-		return c.Hooks.GetObjects()
+		return c.Hooks.ToObjectList()
 	}
 
-	return c.Hooks.Type(o.HookType).GetObjects()
+	return c.Hooks[o.HookType].ToObjectList()
 }
