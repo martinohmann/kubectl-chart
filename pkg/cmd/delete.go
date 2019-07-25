@@ -5,6 +5,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/hooks"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
@@ -139,9 +140,9 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		chart.SortResources(c.Resources, chart.DeleteOrder)
+		resources.SortByKind(c.Resources, resources.DeleteOrder)
 
-		buf, err := o.Serializer.Encode(c.Resources.GetObjects())
+		buf, err := o.Serializer.Encode(c.Resources)
 		if err != nil {
 			return err
 		}
@@ -167,7 +168,7 @@ func (o *DeleteOptions) Run() error {
 			return nil
 		}
 
-		err = o.HookExecutor.ExecHooks(c, chart.PreDeleteHook)
+		err = o.HookExecutor.ExecHooks(c, hook.PreDelete)
 		if err != nil {
 			return err
 		}
@@ -177,7 +178,7 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		err = o.HookExecutor.ExecHooks(c, chart.PostDeleteHook)
+		err = o.HookExecutor.ExecHooks(c, hook.PostDelete)
 		if err != nil {
 			return err
 		}

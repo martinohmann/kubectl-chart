@@ -5,8 +5,10 @@ import (
 	"io/ioutil"
 
 	"github.com/imdario/mergo"
+	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/proto/hapi/chart"
 	"k8s.io/helm/pkg/renderutil"
@@ -17,8 +19,8 @@ import (
 // chart resources and a map of chart hooks.
 type Chart struct {
 	Config    *Config
-	Resources ResourceList
-	Hooks     HookMap
+	Resources []runtime.Object
+	Hooks     hook.Map
 }
 
 // LabelSelector builds valid label selector for a *resource.Builder that
@@ -26,10 +28,6 @@ type Chart struct {
 // for more information.
 func (c *Chart) LabelSelector() string {
 	return fmt.Sprintf("%s=%s", LabelChartName, c.Config.Name)
-}
-
-func (c *Chart) HookLabelSelector(hookType string) string {
-	return fmt.Sprintf("%s=%s,%s=%s", LabelHookChartName, c.Config.Name, LabelHookType, hookType)
 }
 
 // Config is the configuration for rendering a chart.

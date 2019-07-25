@@ -4,34 +4,10 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-)
-
-const (
-	// AnnotationHookType contains the type of the hook. If this annotation is
-	// set on a Job it will be treated as a hook and not show up as regular
-	// resource anymore.
-	AnnotationHookType = "kubectl-chart/hook-type"
-
-	// AnnotationHookAllowFailure controls the behaviour in the event where the
-	// hook fails due to timeouts or because the job failed. If set to "true",
-	// these errors just will be logged and processing of other hooks and
-	// resources continues. Other unhandled errors occuring during hook
-	// execution (e.g. API-Server errors) will still bubble up the error
-	// handling chain.
-	AnnotationHookAllowFailure = "kubectl-chart/hook-allow-failure"
-
-	// AnnotationHookNoWait controls the waiting behaviour. If set to "true",
-	// it is not waited for the hook to complete. This cannot be used together
-	// with AnnotationHookAllowFailure because the success of a hook is not
-	// checked if we do not wait for it to finish.
-	AnnotationHookNoWait = "kubectl-chart/hook-no-wait"
-
-	// AnnotationHookWaitTimeout sets a custom wait timeout for a hook. If not
-	// set, wait.DefaultWaitTimeout is used.
-	AnnotationHookWaitTimeout = "kubectl-chart/hook-wait-timeout"
 )
 
 const (
@@ -52,15 +28,6 @@ const (
 	// to be able to keep track of them once they are deployed into a cluster.
 	LabelChartName = "kubectl-chart/chart-name"
 
-	// LabelHookChartName is used to attach a label to each hook to be able to
-	// keep track of them once they are deployed into a cluster. The label is
-	// different from LabelChartName because hooks have a different lifecycle
-	// than normal resources.
-	LabelHookChartName = "kubectl-chart/hook-chart-name"
-
-	// LabelHookType is set on chart hooks to be able to clean them up by type.
-	LabelHookType = "kubectl-chart/hook-type"
-
 	// LabelOwnedByStatefulSet is set on PersistentVolumeClaims to identify
 	// them when a StatefulSet is deleted.
 	LabelOwnedByStatefulSet = "kubectl-chart/owned-by-statefulset"
@@ -69,7 +36,6 @@ const (
 var (
 	jobGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 
-	jobGK                   = schema.GroupKind{Group: "batch", Kind: "Job"}
 	statefulSetGK           = schema.GroupKind{Group: "apps", Kind: "StatefulSet"}
 	persistentVolumeClaimGK = schema.GroupKind{Kind: "PersistentVolumeClaim"}
 )
@@ -148,4 +114,43 @@ func setNestedStringMapKey(obj map[string]interface{}, key, value string, fields
 // for PersistentVolumeClaims owned by a StatefulSet.
 func persistentVolumeClaimSelector(statefulSetName string) string {
 	return fmt.Sprintf("%s=%s", LabelOwnedByStatefulSet, statefulSetName)
+}
+
+// defaultNamespace will set namespace on the resource if it does not have a
+// namespace set. Will return an error if namespace is empty or accessing the
+// objects metadata fails for some reason.
+func defaultNamespace(obj runtime.Object, namespace string) error {
+	if namespace == "" {
+		return errors.Errorf("default namespace cannot be empty")
+	}
+
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return err
+	}
+
+	if accessor.GetNamespace() != "" {
+		return nil
+	}
+
+	accessor.SetNamespace(namespace)
+
+	return nil
+}
+
+func setLabel(obj runtime.Object, key, value string) error {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return errors.Errorf("obj is of type %T, expected *unstructured.Unstructured", obj)
+	}
+
+	return unstructured.SetNestedField(u.Object, value, "metadata", "labels", key)
+}
+
+func hasAnnotation(obj runtime.Object, key string) bool {
+	metadata, _ := meta.Accessor(obj)
+
+	_, found := metadata.GetAnnotations()[key]
+
+	return found
 }

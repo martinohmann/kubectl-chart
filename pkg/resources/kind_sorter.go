@@ -1,4 +1,4 @@
-package chart
+package resources
 
 // Adapted from https://github.com/helm/helm/blob/master/pkg/tiller/kind_sorter.go
 
@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Order is a slice of strings that defines the ordering of resources.
@@ -74,22 +75,22 @@ var DeleteOrder Order = []string{
 	"Namespace",
 }
 
-type resourceSorter struct {
+type kindSorter struct {
 	order            map[string]int
-	resources        []*Resource
+	objs             []runtime.Object
 	metadataAccessor meta.MetadataAccessor
 	sortForDeletion  bool
 }
 
-func newResourceSorter(resources []*Resource, order Order) *resourceSorter {
+func newKindSorter(objs []runtime.Object, order Order) *kindSorter {
 	o := make(map[string]int)
 
 	for k, v := range order {
 		o[v] = k
 	}
 
-	return &resourceSorter{
-		resources:        resources,
+	return &kindSorter{
+		objs:             objs,
 		metadataAccessor: meta.NewAccessor(),
 		sortForDeletion:  reflect.DeepEqual(order, DeleteOrder),
 		order:            o,
@@ -97,18 +98,18 @@ func newResourceSorter(resources []*Resource, order Order) *resourceSorter {
 }
 
 // Len implements Len from sort.Interface.
-func (s *resourceSorter) Len() int {
-	return len(s.resources)
+func (s *kindSorter) Len() int {
+	return len(s.objs)
 }
 
 // Swap implements Swap from sort.Interface.
-func (s *resourceSorter) Swap(i, j int) {
-	s.resources[i], s.resources[j] = s.resources[j], s.resources[i]
+func (s *kindSorter) Swap(i, j int) {
+	s.objs[i], s.objs[j] = s.objs[j], s.objs[i]
 }
 
 // Less implements Less from sort.Interface.
-func (s *resourceSorter) Less(i, j int) bool {
-	a, b := s.resources[i], s.resources[j]
+func (s *kindSorter) Less(i, j int) bool {
+	a, b := s.objs[i], s.objs[j]
 
 	gvkA := a.GetObjectKind().GroupVersionKind()
 	gvkB := b.GetObjectKind().GroupVersionKind()
@@ -142,11 +143,11 @@ func (s *resourceSorter) Less(i, j int) bool {
 	return posA < posB
 }
 
-// SortResources sorts a slice of runtime.Object in the given order.
-func SortResources(resources []*Resource, order Order) []*Resource {
-	s := newResourceSorter(resources, order)
+// SortByKind sorts a slice of runtime.Object in the given order.
+func SortByKind(objs []runtime.Object, order Order) []runtime.Object {
+	s := newKindSorter(objs, order)
 
 	sort.Sort(s)
 
-	return resources
+	return objs
 }

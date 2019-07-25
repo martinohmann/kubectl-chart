@@ -7,6 +7,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/hooks"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
@@ -205,7 +206,7 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
-		objs := c.Resources.GetObjects()
+		objs := c.Resources
 
 		if len(objs) == 0 {
 			// we bail out early if there are no objects to apply.
@@ -241,7 +242,7 @@ func (o *ApplyOptions) Run() error {
 
 		defer os.Remove(f.Name())
 
-		err = o.HookExecutor.ExecHooks(c, chart.PreApplyHook)
+		err = o.HookExecutor.ExecHooks(c, hook.PreApply)
 		if err != nil {
 			return err
 		}
@@ -253,7 +254,7 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
-		return o.HookExecutor.ExecHooks(c, chart.PostApplyHook)
+		return o.HookExecutor.ExecHooks(c, hook.PostApply)
 	})
 	if err != nil {
 		return err

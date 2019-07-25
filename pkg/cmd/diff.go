@@ -139,7 +139,7 @@ const maxRetries = 4
 // produces a diff of potential changes. The resources are merged with live
 // object information to avoid showing diffs for generated fields.
 func (o *DiffOptions) diffRenderedResources(c *chart.Chart) error {
-	buf, err := o.Serializer.Encode(c.Resources.GetObjects())
+	buf, err := o.Serializer.Encode(c.Resources)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 		return err
 	}
 
-	chartObjs := c.Resources.GetObjects()
+	chartObjs := c.Resources
 
 	return r.Visit(func(info *resource.Info, err error) error {
 		if err != nil {

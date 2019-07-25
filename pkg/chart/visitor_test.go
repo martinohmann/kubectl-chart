@@ -30,8 +30,8 @@ func (v *testVisitor) Handle(c *Chart, err error) error {
 		v.seenHooks = make(map[string]int)
 	}
 
-	v.seenResources[c.Config.Name] = len(c.Resources.GetObjects())
-	v.seenHooks[c.Config.Name] = len(c.Hooks.GetObjects())
+	v.seenResources[c.Config.Name] = len(c.Resources)
+	v.seenHooks[c.Config.Name] = len(c.Hooks.ToObjectList())
 
 	return nil
 }
