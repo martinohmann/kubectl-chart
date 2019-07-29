@@ -5,6 +5,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,14 +52,14 @@ type RenderOptions struct {
 	ChartFlags ChartFlags
 	HookType   string
 
-	Serializer chart.Serializer
-	Visitor    chart.Visitor
+	Encoder resources.Encoder
+	Visitor chart.Visitor
 }
 
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 	return &RenderOptions{
-		IOStreams:  streams,
-		Serializer: yaml.NewSerializer(),
+		IOStreams: streams,
+		Encoder:   yaml.NewSerializer(),
 	}
 }
 
@@ -89,7 +90,7 @@ func (o *RenderOptions) Run() error {
 
 		objs := o.selectResources(c)
 
-		buf, err := o.Serializer.Encode(objs)
+		buf, err := o.Encoder.Encode(objs)
 		if err != nil {
 			return err
 		}

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,8 +32,8 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:   PostApply,
-							AnnotationHookNoWait: "true",
+							meta.AnnotationHookType:   PostApply,
+							meta.AnnotationHookNoWait: "true",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -63,9 +64,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:         PostApply,
-							AnnotationHookAllowFailure: "true",
-							AnnotationHookWaitTimeout:  "1h",
+							meta.AnnotationHookType:         PostApply,
+							meta.AnnotationHookAllowFailure: "true",
+							meta.AnnotationHookWaitTimeout:  "1h",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -96,9 +97,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:         PostApply,
-							AnnotationHookAllowFailure: "true",
-							AnnotationHookWaitTimeout:  "1h",
+							meta.AnnotationHookType:         PostApply,
+							meta.AnnotationHookAllowFailure: "true",
+							meta.AnnotationHookWaitTimeout:  "1h",
 						},
 					},
 					"data": map[string]interface{}{
@@ -118,9 +119,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:         "foo",
-							AnnotationHookAllowFailure: "true",
-							AnnotationHookWaitTimeout:  "1h",
+							meta.AnnotationHookType:         "foo",
+							meta.AnnotationHookAllowFailure: "true",
+							meta.AnnotationHookWaitTimeout:  "1h",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -144,9 +145,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:         PreApply,
-							AnnotationHookAllowFailure: "true",
-							AnnotationHookNoWait:       "true",
+							meta.AnnotationHookType:         PreApply,
+							meta.AnnotationHookAllowFailure: "true",
+							meta.AnnotationHookNoWait:       "true",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -170,9 +171,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:         PreApply,
-							AnnotationHookAllowFailure: "true",
-							AnnotationHookWaitTimeout:  "foo",
+							meta.AnnotationHookType:         PreApply,
+							meta.AnnotationHookAllowFailure: "true",
+							meta.AnnotationHookWaitTimeout:  "foo",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -196,9 +197,9 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:        PreApply,
-							AnnotationHookWaitTimeout: "5m",
-							AnnotationHookNoWait:      "true",
+							meta.AnnotationHookType:        PreApply,
+							meta.AnnotationHookWaitTimeout: "5m",
+							meta.AnnotationHookNoWait:      "true",
 						},
 					},
 					"spec": map[string]interface{}{
@@ -222,8 +223,8 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							AnnotationHookType:   PreApply,
-							AnnotationHookNoWait: "true",
+							meta.AnnotationHookType:   PreApply,
+							meta.AnnotationHookNoWait: "true",
 						},
 					},
 					"spec": map[string]interface{}{

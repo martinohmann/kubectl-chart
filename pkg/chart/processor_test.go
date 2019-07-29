@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -12,7 +13,7 @@ import (
 
 func TestProcessor_Process(t *testing.T) {
 	config := &Config{
-		Dir:       "testdata/chart1",
+		Dir:       "testdata/valid-charts/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
 		Values:    map[interface{}]interface{}{},
@@ -37,7 +38,7 @@ func TestProcessor_Process(t *testing.T) {
 						"helm.sh/chart":                "chart1-0.1.0",
 						"app.kubernetes.io/instance":   "foobar",
 						"app.kubernetes.io/managed-by": "Tiller",
-						LabelChartName:                 "foobar",
+						meta.LabelChartName:            "foobar",
 					},
 				},
 				"spec": map[string]interface{}{
@@ -65,22 +66,22 @@ func TestProcessor_Process(t *testing.T) {
 					"name":      "foobar-chart1",
 					"namespace": "foo",
 					"labels": map[string]interface{}{
-						LabelChartName: "foobar",
+						meta.LabelChartName: "foobar",
 					},
 				},
 				"spec": map[string]interface{}{
 					"serviceName": "foobar-chart1",
 					"selector": map[string]interface{}{
 						"matchLabels": map[string]interface{}{
-							"foo":                   "bar",
-							LabelOwnedByStatefulSet: "foobar-chart1",
+							"foo":                        "bar",
+							meta.LabelOwnedByStatefulSet: "foobar-chart1",
 						},
 					},
 					"template": map[string]interface{}{
 						"metadata": map[string]interface{}{
 							"labels": map[string]interface{}{
-								"foo":                   "bar",
-								LabelOwnedByStatefulSet: "foobar-chart1",
+								"foo":                        "bar",
+								meta.LabelOwnedByStatefulSet: "foobar-chart1",
 							},
 						},
 					},
@@ -89,7 +90,7 @@ func TestProcessor_Process(t *testing.T) {
 							"metadata": map[string]interface{}{
 								"name": "baz",
 								"labels": map[string]interface{}{
-									LabelOwnedByStatefulSet: "foobar-chart1",
+									meta.LabelOwnedByStatefulSet: "foobar-chart1",
 								},
 							},
 						},
@@ -110,15 +111,15 @@ func TestProcessor_Process(t *testing.T) {
 							"name":      "foobar-chart1",
 							"namespace": "bar",
 							"annotations": map[string]interface{}{
-								hook.AnnotationHookType: hook.PostApply,
+								meta.AnnotationHookType: hook.PostApply,
 							},
 							"labels": map[string]interface{}{
 								"app.kubernetes.io/name":       "chart1",
 								"helm.sh/chart":                "chart1-0.1.0",
 								"app.kubernetes.io/instance":   "foobar",
 								"app.kubernetes.io/managed-by": "Tiller",
-								hook.LabelHookChartName:        "foobar",
-								hook.LabelHookType:             hook.PostApply,
+								meta.LabelHookChartName:        "foobar",
+								meta.LabelHookType:             hook.PostApply,
 							},
 						},
 						"spec": map[string]interface{}{
@@ -154,7 +155,7 @@ func TestProcessor_Process(t *testing.T) {
 
 func TestProcessor_ProcessUnsupportedHook(t *testing.T) {
 	config := &Config{
-		Dir:       "testdata/chart1",
+		Dir:       "testdata/valid-charts/chart1",
 		Name:      "foobar",
 		Namespace: "foo",
 		Values: map[interface{}]interface{}{
@@ -167,5 +168,5 @@ func TestProcessor_ProcessUnsupportedHook(t *testing.T) {
 	_, err := p.Process(config)
 
 	require.Error(t, err)
-	assert.Equal(t, `unsupported hook type "foo", allowed values are "pre-apply", "post-apply", "pre-delete", "post-delete"`, err.Error())
+	assert.Equal(t, `while parsing template "chart1/templates/hook.yaml": unsupported hook type "foo", allowed values are "pre-apply", "post-apply", "pre-delete", "post-delete"`, err.Error())
 }

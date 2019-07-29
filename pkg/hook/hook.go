@@ -1,12 +1,16 @@
 package hook
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Supported types of hooks.
@@ -19,6 +23,15 @@ const (
 
 // SupportedTypes contains a list of supported hook types.
 var SupportedTypes = []string{PreApply, PostApply, PreDelete, PostDelete}
+
+// jobGK is the GroupKind that a hook resource must have.
+var jobGK = schema.GroupKind{Group: "batch", Kind: "Job"}
+
+// LabelSelector returns a selector which can be used to find hooks of given
+// type for given chart in a cluster.
+func LabelSelector(chartName, hookType string) string {
+	return fmt.Sprintf("%s=%s,%s=%s", meta.LabelHookChartName, chartName, meta.LabelHookType, hookType)
+}
 
 // Hook gets executed before or after apply/delete depending on its type. It
 // wraps an unstructured object to enhance it with some extra logic for
@@ -49,21 +62,21 @@ func (h *Hook) nestedString(fields ...string) string {
 	return value
 }
 
-// RestartPolicy gets the restartPolicy from the hook jobs pod spec.
-func (h *Hook) RestartPolicy() string {
-	return h.nestedString("spec", "template", "spec", "restartPolicy")
+// restartPolicy gets the restartPolicy from the hook jobs pod spec.
+func (h *Hook) restartPolicy() corev1.RestartPolicy {
+	return corev1.RestartPolicy(h.nestedString("spec", "template", "spec", "restartPolicy"))
 }
 
 // Type returns the hook type, e.g. post-apply.
 func (h *Hook) Type() string {
-	return h.nestedString("metadata", "annotations", AnnotationHookType)
+	return h.nestedString("metadata", "annotations", meta.AnnotationHookType)
 }
 
 // AllowFailure indicates whether the hook is allowed to fail or not. If true,
 // hook errors are only printed and execution continues. If this is true,
 // NoWait() must not return true as well.
 func (h *Hook) AllowFailure() bool {
-	value := h.nestedString("metadata", "annotations", AnnotationHookAllowFailure)
+	value := h.nestedString("metadata", "annotations", meta.AnnotationHookAllowFailure)
 	b, err := strconv.ParseBool(value)
 	if err != nil {
 		return false
@@ -76,7 +89,7 @@ func (h *Hook) AllowFailure() bool {
 // not. If true, AllowFailure() must not return true and it is also not
 // possible to detect possible hook failures.
 func (h *Hook) NoWait() bool {
-	value := h.nestedString("metadata", "annotations", AnnotationHookNoWait)
+	value := h.nestedString("metadata", "annotations", meta.AnnotationHookNoWait)
 	b, err := strconv.ParseBool(value)
 	if err != nil {
 		return false
@@ -88,7 +101,7 @@ func (h *Hook) NoWait() bool {
 // WaitTimeout returns the timeout for waiting for hook completion and an error
 // if the annotation cannot be parsed.
 func (h *Hook) WaitTimeout() (time.Duration, error) {
-	value, found, _ := unstructured.NestedString(h.Object, "metadata", "annotations", AnnotationHookWaitTimeout)
+	value, found, _ := unstructured.NestedString(h.Object, "metadata", "annotations", meta.AnnotationHookWaitTimeout)
 	if !found {
 		return 0, nil
 	}
@@ -123,21 +136,21 @@ func Validate(h *Hook) error {
 		return UnsupportedTypeError{Type: h.Type()}
 	}
 
-	if h.RestartPolicy() != "Never" {
-		return errors.Errorf("invalid hook %q: restartPolicy of the pod template must be %q", h.GetName(), "Never")
+	if h.restartPolicy() != corev1.RestartPolicyNever {
+		return errors.Errorf("invalid hook %q: restartPolicy of the pod template must be %q", h.GetName(), corev1.RestartPolicyNever)
 	}
 
 	if h.NoWait() && h.AllowFailure() {
-		return errors.Errorf("invalid hook %q: %s and %s cannot be true at the same time", h.GetName(), AnnotationHookNoWait, AnnotationHookAllowFailure)
+		return errors.Errorf("invalid hook %q: %s and %s cannot be true at the same time", h.GetName(), meta.AnnotationHookNoWait, meta.AnnotationHookAllowFailure)
 	}
 
 	timeout, err := h.WaitTimeout()
 	if err != nil {
-		return errors.Wrapf(err, "invalid hook %q: malformed %s annotation", h.GetName(), AnnotationHookWaitTimeout)
+		return errors.Wrapf(err, "invalid hook %q: malformed %s annotation", h.GetName(), meta.AnnotationHookWaitTimeout)
 	}
 
 	if h.NoWait() && timeout > 0 {
-		return errors.Errorf("invalid hook %q: %s and %s cannot be set at the same time", h.GetName(), AnnotationHookNoWait, AnnotationHookWaitTimeout)
+		return errors.Errorf("invalid hook %q: %s and %s cannot be set at the same time", h.GetName(), meta.AnnotationHookNoWait, meta.AnnotationHookWaitTimeout)
 	}
 
 	return err

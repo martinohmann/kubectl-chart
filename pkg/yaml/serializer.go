@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
+
+var _ resources.Serializer = &Serializer{}
 
 // Serializer converts between raw multi-resource yaml manifests and slices of
 // runtime.Object.

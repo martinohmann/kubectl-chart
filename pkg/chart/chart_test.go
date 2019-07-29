@@ -87,3 +87,74 @@ func TestValuesForChart(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadValues(t *testing.T) {
+	cases := []struct {
+		name        string
+		files       []string
+		expected    map[interface{}]interface{}
+		expectedErr string
+	}{
+		{
+			name:     "empty file slice",
+			expected: map[interface{}]interface{}{},
+		},
+		{
+			name:  "load one file",
+			files: []string{"testdata/values.yaml"},
+			expected: map[interface{}]interface{}{
+				"foo": map[interface{}]interface{}{
+					"bar": "baz",
+					"qux": "foo",
+				},
+			},
+		},
+		{
+			name:  "merges two files",
+			files: []string{"testdata/values.yaml", "testdata/additional-values.yaml"},
+			expected: map[interface{}]interface{}{
+				"foo": map[interface{}]interface{}{
+					"bar": "qux",
+					"baz": "foo",
+					"qux": "foo",
+				},
+				"bar": "baz",
+			},
+		},
+		{
+			name:  "merges two files (different order)",
+			files: []string{"testdata/additional-values.yaml", "testdata/values.yaml"},
+			expected: map[interface{}]interface{}{
+				"foo": map[interface{}]interface{}{
+					"bar": "baz",
+					"baz": "foo",
+					"qux": "foo",
+				},
+				"bar": "baz",
+			},
+		},
+		{
+			name:        "returns errors due to non-existent files",
+			files:       []string{"testdata/values.yaml", "testdata/non-existent.yaml"},
+			expectedErr: "open testdata/non-existent.yaml: no such file or directory",
+		},
+		{
+			name:        "returns errors due to invalid files",
+			files:       []string{"testdata/values.yaml", "testdata/invalid-values.yaml"},
+			expectedErr: "unmarshal file testdata/invalid-values.yaml: yaml: line 1: did not find expected node content",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			values, err := LoadValues(tc.files...)
+			if tc.expectedErr != "" {
+				require.Error(t, err)
+				assert.Equal(t, tc.expectedErr, err.Error())
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, values)
+			}
+		})
+	}
+}

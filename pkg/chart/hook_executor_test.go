@@ -12,10 +12,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/api/meta"
+	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,11 +61,11 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 									"name":      "somehook",
 									"namespace": "bar",
 									"annotations": map[string]interface{}{
-										hook.AnnotationHookType: hook.PreApply,
+										meta.AnnotationHookType: hook.PreApply,
 									},
 									"labels": map[string]interface{}{
-										hook.LabelHookChartName: "foochart",
-										hook.LabelHookType:      hook.PreApply,
+										meta.LabelHookChartName: "foochart",
+										meta.LabelHookType:      hook.PreApply,
 									},
 								},
 								"spec": map[string]interface{}{
@@ -94,7 +95,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 
 				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
-				metadata, err := meta.Accessor(obj)
+				metadata, err := kmeta.Accessor(obj)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -134,12 +135,12 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 									"name":      "somehook",
 									"namespace": "bar",
 									"annotations": map[string]interface{}{
-										hook.AnnotationHookType:   hook.PreApply,
-										hook.AnnotationHookNoWait: "true",
+										meta.AnnotationHookType:   hook.PreApply,
+										meta.AnnotationHookNoWait: "true",
 									},
 									"labels": map[string]interface{}{
-										hook.LabelHookChartName: "foochart",
-										hook.LabelHookType:      hook.PreApply,
+										meta.LabelHookChartName: "foochart",
+										meta.LabelHookType:      hook.PreApply,
 									},
 								},
 								"spec": map[string]interface{}{
@@ -169,7 +170,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 
 				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
-				metadata, err := meta.Accessor(obj)
+				metadata, err := kmeta.Accessor(obj)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -201,13 +202,13 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 									"name":      "somehook",
 									"namespace": "bar",
 									"annotations": map[string]interface{}{
-										hook.AnnotationHookType:         hook.PreApply,
-										hook.AnnotationHookAllowFailure: "true",
-										hook.AnnotationHookWaitTimeout:  "1h",
+										meta.AnnotationHookType:         hook.PreApply,
+										meta.AnnotationHookAllowFailure: "true",
+										meta.AnnotationHookWaitTimeout:  "1h",
 									},
 									"labels": map[string]interface{}{
-										hook.LabelHookChartName: "foochart",
-										hook.LabelHookType:      hook.PreApply,
+										meta.LabelHookChartName: "foochart",
+										meta.LabelHookType:      hook.PreApply,
 									},
 									"uid": "some-uid",
 								},
@@ -238,7 +239,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 
 				obj := actions[1].(clienttesting.CreateAction).GetObject()
 
-				metadata, err := meta.Accessor(obj)
+				metadata, err := kmeta.Accessor(obj)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -281,13 +282,13 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 									"name":      "somehook",
 									"namespace": "bar",
 									"annotations": map[string]interface{}{
-										hook.AnnotationHookType:         hook.PostApply,
-										hook.AnnotationHookAllowFailure: "true",
-										hook.AnnotationHookWaitTimeout:  "0s",
+										meta.AnnotationHookType:         hook.PostApply,
+										meta.AnnotationHookAllowFailure: "true",
+										meta.AnnotationHookWaitTimeout:  "0s",
 									},
 									"labels": map[string]interface{}{
-										hook.LabelHookChartName: "foochart",
-										hook.LabelHookType:      hook.PreApply,
+										meta.LabelHookChartName: "foochart",
+										meta.LabelHookType:      hook.PreApply,
 									},
 									"uid": "some-uid",
 								},
@@ -346,11 +347,11 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 									"name":      "somehook",
 									"namespace": "bar",
 									"annotations": map[string]interface{}{
-										hook.AnnotationHookType: hook.PostApply,
+										meta.AnnotationHookType: hook.PostApply,
 									},
 									"labels": map[string]interface{}{
-										hook.LabelHookChartName: "foochart",
-										hook.LabelHookType:      hook.PostApply,
+										meta.LabelHookChartName: "foochart",
+										meta.LabelHookType:      hook.PostApply,
 									},
 								},
 								"spec": map[string]interface{}{
@@ -409,7 +410,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			deleter := deletions.NewFakeDeleter()
 			waiter := wait.NewFakeWaiter()
 
-			e := &HookExecutor{
+			e := &hookExecutor{
 				IOStreams:     genericclioptions.NewTestIOStreamsDiscard(),
 				Deleter:       deleter,
 				Waiter:        waiter,
@@ -501,7 +502,7 @@ func newDefaultBuilder() *resource.Builder {
 func newDefaultBuilderWith(fakeClientFn resource.FakeClientFunc) *resource.Builder {
 	return resource.NewFakeBuilder(
 		fakeClientFn,
-		func() (meta.RESTMapper, error) {
+		func() (kmeta.RESTMapper, error) {
 			return testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme), nil
 		},
 		func() (restmapper.CategoryExpander, error) {

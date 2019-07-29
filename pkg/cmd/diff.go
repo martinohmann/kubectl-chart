@@ -55,7 +55,7 @@ type DiffOptions struct {
 	DryRunVerifier *apply.DryRunVerifier
 	BuilderFactory func() *resource.Builder
 	DiffPrinter    diff.Printer
-	Serializer     chart.Serializer
+	Encoder        resources.Encoder
 	Visitor        chart.Visitor
 
 	Namespace string
@@ -63,9 +63,9 @@ type DiffOptions struct {
 
 func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 	return &DiffOptions{
-		IOStreams:  streams,
-		DiffFlags:  NewDefaultDiffFlags(),
-		Serializer: yaml.NewSerializer(),
+		IOStreams: streams,
+		DiffFlags: NewDefaultDiffFlags(),
+		Encoder:   yaml.NewSerializer(),
 	}
 }
 
@@ -139,7 +139,7 @@ const maxRetries = 4
 // produces a diff of potential changes. The resources are merged with live
 // object information to avoid showing diffs for generated fields.
 func (o *DiffOptions) diffRenderedResources(c *chart.Chart) error {
-	buf, err := o.Serializer.Encode(c.Resources)
+	buf, err := o.Encoder.Encode(c.Resources)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 	r := o.BuilderFactory().
 		Unstructured().
 		AllNamespaces(true).
-		LabelSelectorParam(c.LabelSelector()).
+		LabelSelectorParam(chart.LabelSelector(c)).
 		ResourceTypeOrNameArgs(true, "all").
 		Flatten().
 		Do()

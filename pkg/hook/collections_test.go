@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +23,7 @@ func newUnstructured(name, hookType string) *unstructured.Unstructured {
 				"name":      name,
 				"namespace": "bar",
 				"annotations": map[string]interface{}{
-					AnnotationHookType: hookType,
+					meta.AnnotationHookType: hookType,
 				},
 			},
 			"spec": map[string]interface{}{
@@ -57,7 +58,7 @@ func TestMap(t *testing.T) {
 		m[PostApply],
 	)
 
-	assert.Equal(
+	assert.ElementsMatch(
 		t,
 		[]runtime.Object{
 			newUnstructured("foo", PreApply),

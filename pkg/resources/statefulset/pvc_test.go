@@ -1,4 +1,4 @@
-package chart
+package statefulset
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -109,7 +110,7 @@ func TestPersistentVolumeClaimPruner_PruneClaims(t *testing.T) {
 						"kind":       "StatefulSet",
 						"metadata": map[string]interface{}{
 							"annotations": map[string]interface{}{
-								AnnotationDeletionPolicy: DeletionPolicyDeletePVCs,
+								meta.AnnotationDeletionPolicy: meta.DeletionPolicyDeletePVCs.String(),
 							},
 							"name": "foo",
 						},

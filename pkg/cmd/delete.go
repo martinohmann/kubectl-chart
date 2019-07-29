@@ -6,9 +6,8 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
-	"github.com/martinohmann/kubectl-chart/pkg/hooks"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
-	"github.com/martinohmann/kubectl-chart/pkg/wait"
+	"github.com/martinohmann/kubectl-chart/pkg/resources/statefulset"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -64,9 +63,9 @@ type DeleteOptions struct {
 	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
 	Mapper         meta.RESTMapper
-	Serializer     chart.Serializer
+	Encoder        resources.Encoder
 	Visitor        chart.Visitor
-	HookExecutor   hooks.Executor
+	HookExecutor   chart.HookExecutor
 	Deleter        deletions.Deleter
 
 	Namespace        string
@@ -75,8 +74,8 @@ type DeleteOptions struct {
 
 func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 	return &DeleteOptions{
-		IOStreams:  streams,
-		Serializer: yaml.NewSerializer(),
+		IOStreams: streams,
+		Encoder:   yaml.NewSerializer(),
 	}
 }
 
@@ -111,17 +110,15 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	o.Deleter = deletions.NewDeleter(o.IOStreams, o.DynamicClient, p, o.DryRun)
 
 	if o.HookFlags.NoHooks {
-		o.HookExecutor = &hooks.NoopExecutor{}
+		o.HookExecutor = &chart.NoopHookExecutor{}
 	} else {
-		o.HookExecutor = &chart.HookExecutor{
-			IOStreams:     o.IOStreams,
-			DryRun:        o.DryRun,
-			DynamicClient: o.DynamicClient,
-			Mapper:        o.Mapper,
-			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
-			Deleter:       o.Deleter,
-			Printer:       p,
-		}
+		o.HookExecutor = chart.NewHookExecutor(
+			o.IOStreams,
+			o.DynamicClient,
+			o.Mapper,
+			p,
+			o.DryRun,
+		)
 	}
 
 	visitor, err := o.ChartFlags.ToVisitor(o.Namespace)
@@ -142,7 +139,7 @@ func (o *DeleteOptions) Run() error {
 
 		resources.SortByKind(c.Resources, resources.DeleteOrder)
 
-		buf, err := o.Serializer.Encode(c.Resources)
+		buf, err := o.Encoder.Encode(c.Resources)
 		if err != nil {
 			return err
 		}
@@ -188,7 +185,7 @@ func (o *DeleteOptions) Run() error {
 			return nil
 		}
 
-		pvcPruner := &chart.PersistentVolumeClaimPruner{
+		pvcPruner := &statefulset.PersistentVolumeClaimPruner{
 			Deleter:       o.Deleter,
 			DynamicClient: o.DynamicClient,
 			Mapper:        o.Mapper,

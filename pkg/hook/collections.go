@@ -15,8 +15,17 @@ func (m Map) ToObjectList() []runtime.Object {
 	return objs
 }
 
-// Add adds h to the map and puts it into the bucket determined by its type.
-func (m Map) Add(h *Hook) Map {
+// Add adds hooks to the map and puts them into the buckets determined by their
+// type.
+func (m Map) Add(hooks ...*Hook) Map {
+	for _, h := range hooks {
+		m.add(h)
+	}
+
+	return m
+}
+
+func (m Map) add(h *Hook) Map {
 	hookType := h.Type()
 
 	if m[hookType] == nil {

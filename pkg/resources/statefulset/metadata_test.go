@@ -1,8 +1,9 @@
-package chart
+package statefulset
 
 import (
 	"testing"
 
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -10,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestLabelStatefulSet(t *testing.T) {
+func TestAddOwnerLabels(t *testing.T) {
 	tests := []struct {
 		name        string
 		obj         runtime.Object
@@ -63,15 +64,15 @@ func TestLabelStatefulSet(t *testing.T) {
 						"serviceName": "foobar",
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								"foo":                   "bar",
-								LabelOwnedByStatefulSet: "foobar",
+								"foo":                        "bar",
+								meta.LabelOwnedByStatefulSet: "foobar",
 							},
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{
-									"foo":                   "bar",
-									LabelOwnedByStatefulSet: "foobar",
+									"foo":                        "bar",
+									meta.LabelOwnedByStatefulSet: "foobar",
 								},
 							},
 						},
@@ -80,7 +81,7 @@ func TestLabelStatefulSet(t *testing.T) {
 								"metadata": map[string]interface{}{
 									"name": "baz",
 									"labels": map[string]interface{}{
-										LabelOwnedByStatefulSet: "foobar",
+										meta.LabelOwnedByStatefulSet: "foobar",
 									},
 								},
 							},
@@ -103,15 +104,15 @@ func TestLabelStatefulSet(t *testing.T) {
 						"serviceName": "foobar",
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								"foo":                   "bar",
-								LabelOwnedByStatefulSet: "bar",
+								"foo":                        "bar",
+								meta.LabelOwnedByStatefulSet: "bar",
 							},
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{
-									"foo":                   "bar",
-									LabelOwnedByStatefulSet: "bar",
+									"foo":                        "bar",
+									meta.LabelOwnedByStatefulSet: "bar",
 								},
 							},
 						},
@@ -137,15 +138,15 @@ func TestLabelStatefulSet(t *testing.T) {
 						"serviceName": "foobar",
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								"foo":                   "bar",
-								LabelOwnedByStatefulSet: "foobar",
+								"foo":                        "bar",
+								meta.LabelOwnedByStatefulSet: "foobar",
 							},
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{
-									"foo":                   "bar",
-									LabelOwnedByStatefulSet: "foobar",
+									"foo":                        "bar",
+									meta.LabelOwnedByStatefulSet: "foobar",
 								},
 							},
 						},
@@ -154,7 +155,7 @@ func TestLabelStatefulSet(t *testing.T) {
 								"metadata": map[string]interface{}{
 									"name": "baz",
 									"labels": map[string]interface{}{
-										LabelOwnedByStatefulSet: "foobar",
+										meta.LabelOwnedByStatefulSet: "foobar",
 									},
 								},
 							},
@@ -202,15 +203,15 @@ func TestLabelStatefulSet(t *testing.T) {
 						"serviceName": "foobar",
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								"foo":                   "bar",
-								LabelOwnedByStatefulSet: "foobar",
+								"foo":                        "bar",
+								meta.LabelOwnedByStatefulSet: "foobar",
 							},
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{
-									"foo":                   "bar",
-									LabelOwnedByStatefulSet: "foobar",
+									"foo":                        "bar",
+									meta.LabelOwnedByStatefulSet: "foobar",
 								},
 							},
 						},
@@ -397,13 +398,13 @@ func TestLabelStatefulSet(t *testing.T) {
 					"spec": map[string]interface{}{
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								LabelOwnedByStatefulSet: "foobar",
+								meta.LabelOwnedByStatefulSet: "foobar",
 							},
 						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{
-									LabelOwnedByStatefulSet: "foobar",
+									meta.LabelOwnedByStatefulSet: "foobar",
 								},
 							},
 						},
@@ -416,11 +417,25 @@ func TestLabelStatefulSet(t *testing.T) {
 			expectedErr: "obj is of type *v1.StatefulSet, expected *unstructured.Unstructured",
 			obj:         &appsv1.StatefulSet{},
 		},
+		{
+			name:        "wrong GroupKind",
+			expectedErr: `obj "foobar" is of GroupKind "Job.batch", expected "StatefulSet.apps"`,
+			obj: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "batch/v1",
+					"kind":       "Job",
+					"metadata": map[string]interface{}{
+						"name":      "foobar",
+						"namespace": "foo",
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := labelStatefulSet(test.obj)
+			err := AddOwnerLabels(test.obj)
 			if test.expectedErr != "" {
 				require.Error(t, err)
 				assert.Equal(t, test.expectedErr, err.Error())
