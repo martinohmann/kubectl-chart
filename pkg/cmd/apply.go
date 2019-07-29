@@ -8,10 +8,10 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
-	"github.com/martinohmann/kubectl-chart/pkg/hooks"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/recorders"
-	"github.com/martinohmann/kubectl-chart/pkg/wait"
+	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/martinohmann/kubectl-chart/pkg/resources/statefulset"
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -86,9 +86,9 @@ type ApplyOptions struct {
 	OpenAPISchema   openapi.Resources
 	Mapper          meta.RESTMapper
 	BuilderFactory  func() *resource.Builder
-	Serializer      chart.Serializer
+	Encoder         resources.Encoder
 	Visitor         chart.Visitor
-	HookExecutor    hooks.Executor
+	HookExecutor    chart.HookExecutor
 	Deleter         deletions.Deleter
 
 	Namespace        string
@@ -97,10 +97,10 @@ type ApplyOptions struct {
 
 func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 	return &ApplyOptions{
-		IOStreams:  streams,
-		DiffFlags:  NewDefaultDiffFlags(),
-		Recorder:   recorders.NewOperationRecorder(),
-		Serializer: yaml.NewSerializer(),
+		IOStreams: streams,
+		DiffFlags: NewDefaultDiffFlags(),
+		Recorder:  recorders.NewOperationRecorder(),
+		Encoder:   yaml.NewSerializer(),
 	}
 }
 
@@ -166,17 +166,15 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	)
 
 	if o.HookFlags.NoHooks {
-		o.HookExecutor = &hooks.NoopExecutor{}
+		o.HookExecutor = &chart.NoopHookExecutor{}
 	} else {
-		o.HookExecutor = &chart.HookExecutor{
-			IOStreams:     o.IOStreams,
-			DryRun:        dryRun,
-			DynamicClient: o.DynamicClient,
-			Mapper:        o.Mapper,
-			Waiter:        wait.NewDefaultWaiter(o.IOStreams),
-			Deleter:       o.Deleter,
-			Printer:       o.Printer,
-		}
+		o.HookExecutor = chart.NewHookExecutor(
+			o.IOStreams,
+			o.DynamicClient,
+			o.Mapper,
+			o.Printer,
+			dryRun,
+		)
 	}
 
 	if !o.ShowDiff {
@@ -193,8 +191,8 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 			Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
 			OpenAPIGetter: o.DiscoveryClient,
 		},
-		Serializer: o.Serializer,
-		Visitor:    o.Visitor,
+		Encoder: o.Encoder,
+		Visitor: o.Visitor,
 	}
 
 	return nil
@@ -220,7 +218,7 @@ func (o *ApplyOptions) Run() error {
 			}
 		}
 
-		buf, err := o.Serializer.Encode(objs)
+		buf, err := o.Encoder.Encode(objs)
 		if err != nil {
 			return err
 		}
@@ -265,7 +263,7 @@ func (o *ApplyOptions) Run() error {
 		return nil
 	}
 
-	pvcPruner := &chart.PersistentVolumeClaimPruner{
+	pvcPruner := &statefulset.PersistentVolumeClaimPruner{
 		Deleter:       o.Deleter,
 		DynamicClient: o.DynamicClient,
 		Mapper:        o.Mapper,
@@ -282,7 +280,7 @@ func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.App
 		Overwrite:    true,
 		OpenAPIPatch: true,
 		Prune:        true,
-		Selector:     c.LabelSelector(),
+		Selector:     chart.LabelSelector(c),
 		DeleteOptions: &delete.DeleteOptions{
 			Cascade:     true,
 			GracePeriod: -1,

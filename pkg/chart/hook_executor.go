@@ -11,14 +11,26 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 )
 
-// HookExecutor executes chart lifecycle hooks.
-type HookExecutor struct {
+var jobGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
+
+// HookExecutor executes chart lifecycle hooks
+type HookExecutor interface {
+	// ExecHooks takes a chart and executes all hooks of type hookType that are
+	// defined in the chart. Depending on the configuration of the hooks it may
+	// returns errors if hooks fail or not. Should return all other errors that
+	// occur while hook execution.
+	ExecHooks(c *Chart, hookType string) error
+}
+
+// hookExecutor executes chart lifecycle hooks.
+type hookExecutor struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
 	Mapper        meta.RESTMapper
@@ -28,10 +40,29 @@ type HookExecutor struct {
 	DryRun        bool
 }
 
+// NewHookExecutor creates a new HookExecutor.
+func NewHookExecutor(
+	streams genericclioptions.IOStreams,
+	client dynamic.Interface,
+	mapper meta.RESTMapper,
+	printer printers.ContextPrinter,
+	dryRun bool,
+) HookExecutor {
+	return &hookExecutor{
+		IOStreams:     streams,
+		DynamicClient: client,
+		Mapper:        mapper,
+		Deleter:       deletions.NewDeleter(streams, client, printer, dryRun),
+		Waiter:        wait.NewDefaultWaiter(streams),
+		Printer:       printer.WithOperation("triggered"),
+		DryRun:        dryRun,
+	}
+}
+
 // ExecHooks executes hooks of hookType from chart c. It will attempt to delete
 // job hooks matching a label selector that are already deployed to the cluster
 // before creating the hooks to prevent errors.
-func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
+func (e *hookExecutor) ExecHooks(c *Chart, hookType string) error {
 	hooks := c.Hooks[hookType]
 
 	if len(hooks) == 0 {
@@ -115,7 +146,7 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 	return e.waitForCompletion(infos, resourceOptions)
 }
 
-func (e *HookExecutor) cleanupHooks(chartName, hookType string) error {
+func (e *hookExecutor) cleanupHooks(chartName, hookType string) error {
 	objs, err := e.DynamicClient.
 		Resource(jobGVR).
 		Namespace(metav1.NamespaceAll).
@@ -138,7 +169,7 @@ func (e *HookExecutor) cleanupHooks(chartName, hookType string) error {
 	return e.Deleter.Delete(resource.InfoListVisitor(infos))
 }
 
-func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {
+func (e *hookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {
 	if len(infos) == 0 {
 		return nil
 	}
@@ -159,7 +190,7 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 }
 
 // PrintHook prints a hooks.
-func (e *HookExecutor) PrintHook(h *hook.Hook) error {
+func (e *hookExecutor) PrintHook(h *hook.Hook) error {
 	options := make([]string, 0)
 
 	if timeout, _ := h.WaitTimeout(); timeout > 0 {
@@ -174,8 +205,13 @@ func (e *HookExecutor) PrintHook(h *hook.Hook) error {
 		options = append(options, "allow-failure")
 	}
 
-	return e.Printer.
-		WithOperation("triggered").
-		WithContext(options...).
-		PrintObj(h, e.Out)
+	return e.Printer.WithContext(options...).PrintObj(h, e.Out)
+}
+
+// NoopHookExecutor does not execute any hooks.
+type NoopHookExecutor struct{}
+
+// ExecHooks implements HookExecutor.
+func (e *NoopHookExecutor) ExecHooks(*Chart, string) error {
+	return nil
 }

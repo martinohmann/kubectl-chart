@@ -6,6 +6,7 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
+	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -13,48 +14,50 @@ import (
 // Processor type processes a chart config and renders the contained resources.
 // It will also perform post-processing on these resources.
 type Processor struct {
-	Parser *Parser
+	Decoder resources.Decoder
 }
 
-// NewProcessor creates a new *Processor values which uses given parser to
-// parse rendered chart templates.
-func NewProcessor(p *Parser) *Processor {
+// NewProcessor creates a new *Processor values which uses given decoder to
+// decode rendered chart templates.
+func NewProcessor(d resources.Decoder) *Processor {
 	return &Processor{
-		Parser: p,
+		Decoder: d,
 	}
 }
 
 // NewDefaultProcessor creates a new *Processor value.
 func NewDefaultProcessor() *Processor {
-	return NewProcessor(NewYAMLParser())
+	return NewProcessor(yaml.NewSerializer())
 }
 
-// Process takes a chart config, renders and processes it. The first return
-// value contains all resources found in the rendered chart, whereas the second
-// return value contains all chart hooks.
+// Process takes a chart config, renders and processes it.
 func (p *Processor) Process(config *Config) (*Chart, error) {
 	templates, err := Render(config)
 	if err != nil {
 		return nil, err
 	}
 
-	resourceList, hookMap, err := p.parseTemplates(config, templates)
+	resources, hookMap, err := p.decodeTemplates(config, templates)
 	if err != nil {
 		return nil, err
 	}
 
 	c := &Chart{
 		Config:    config,
-		Resources: resourceList,
+		Resources: resources,
 		Hooks:     hookMap,
 	}
 
 	return c, nil
 }
 
-func (p *Processor) parseTemplates(config *Config, templates map[string]string) ([]runtime.Object, hook.Map, error) {
-	resourceList := make([]runtime.Object, 0)
+// decodeTemplates decodes templates into resources and hooks for given chart
+// config.
+func (p *Processor) decodeTemplates(config *Config, templates map[string]string) ([]runtime.Object, hook.Map, error) {
+	objs := make([]runtime.Object, 0)
 	hookMap := make(hook.Map)
+
+	decoder := newTemplateDecoder(config, p.Decoder)
 
 	for name, content := range templates {
 		base := filepath.Base(name)
@@ -64,42 +67,17 @@ func (p *Processor) parseTemplates(config *Config, templates map[string]string) 
 			continue
 		}
 
-		resourceObjs, hookObjs, err := p.Parser.Parse([]byte(content))
+		resources, hooks, err := decoder.decodeTemplate([]byte(content))
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "while parsing template %q", name)
+
 		}
 
-		for _, obj := range resourceObjs {
-			defaultNamespace(obj, config.Namespace)
-			setLabel(obj, LabelChartName, config.Name)
-
-			gvk := obj.GetObjectKind().GroupVersionKind()
-
-			if gvk.GroupKind() == statefulSetGK {
-				err = labelStatefulSet(obj)
-				if err != nil {
-					return nil, nil, err
-				}
-			}
-
-			resourceList = append(resourceList, obj)
-		}
-
-		for _, obj := range hookObjs {
-			h, err := hook.New(obj)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			setLabel(obj, hook.LabelHookChartName, config.Name)
-			setLabel(obj, hook.LabelHookType, h.Type())
-			defaultNamespace(obj, config.Namespace)
-
-			hookMap.Add(h)
-		}
+		objs = append(objs, resources...)
+		hookMap.Add(hooks...)
 	}
 
-	resources.SortByKind(resourceList, resources.ApplyOrder)
+	resources.SortByKind(objs, resources.ApplyOrder)
 
-	return resourceList, hookMap, nil
+	return objs, hookMap, nil
 }

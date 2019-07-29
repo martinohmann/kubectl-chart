@@ -38,7 +38,7 @@ func (v *testVisitor) Handle(c *Chart, err error) error {
 
 func TestVisitor_Visit(t *testing.T) {
 	opts := VisitorOptions{
-		ChartDir:  "testdata/chart1",
+		ChartDir:  "testdata/valid-charts/chart1",
 		Namespace: "default",
 	}
 
@@ -55,7 +55,7 @@ func TestVisitor_Visit(t *testing.T) {
 
 func TestVisitor_VisitRecursive(t *testing.T) {
 	opts := VisitorOptions{
-		ChartDir:  "testdata",
+		ChartDir:  "testdata/valid-charts",
 		Namespace: "default",
 		Recursive: true,
 	}
@@ -76,7 +76,7 @@ func TestVisitor_VisitRecursive(t *testing.T) {
 
 func TestVisitor_VisitChartFilter(t *testing.T) {
 	opts := VisitorOptions{
-		ChartDir:    "testdata",
+		ChartDir:    "testdata/valid-charts",
 		Namespace:   "default",
 		Recursive:   true,
 		ChartFilter: []string{"chart2"},
@@ -98,7 +98,7 @@ func TestVisitor_VisitChartFilter(t *testing.T) {
 
 func TestReverseVisitor_Visit(t *testing.T) {
 	opts := VisitorOptions{
-		ChartDir:  "testdata",
+		ChartDir:  "testdata/valid-charts",
 		Namespace: "default",
 		Recursive: true,
 	}

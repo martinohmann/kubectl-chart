@@ -6,6 +6,7 @@ import (
 
 	"github.com/imdario/mergo"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
+	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,8 +27,8 @@ type Chart struct {
 // LabelSelector builds valid label selector for a *resource.Builder that
 // selects all resources associated to the chart. See doc of const LabelChartName
 // for more information.
-func (c *Chart) LabelSelector() string {
-	return fmt.Sprintf("%s=%s", LabelChartName, c.Config.Name)
+func LabelSelector(c *Chart) string {
+	return fmt.Sprintf("%s=%s", meta.LabelChartName, c.Config.Name)
 }
 
 // Config is the configuration for rendering a chart.
@@ -84,12 +85,12 @@ func LoadValues(files ...string) (map[interface{}]interface{}, error) {
 
 		err = yaml.Unmarshal(buf, &v)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "unmarshal file %s", f)
 		}
 
 		err = mergo.Merge(&values, v, mergo.WithOverride)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "merge values from file %s", f)
 		}
 	}
 
