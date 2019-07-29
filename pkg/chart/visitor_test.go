@@ -31,7 +31,7 @@ func (v *testVisitor) Handle(c *Chart, err error) error {
 	}
 
 	v.seenResources[c.Config.Name] = len(c.Resources)
-	v.seenHooks[c.Config.Name] = len(c.Hooks.ToObjectList())
+	v.seenHooks[c.Config.Name] = len(c.Hooks.All())
 
 	return nil
 }

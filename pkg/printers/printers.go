@@ -60,11 +60,12 @@ func (p *RecordingPrinter) PrintObj(obj runtime.Object, w io.Writer) error {
 type colorFunc func(format string, a ...interface{}) string
 
 var colorMap = map[string]colorFunc{
+	"completed":  color.GreenString,
+	"configured": color.YellowString,
 	"created":    color.GreenString,
 	"deleted":    color.RedString,
 	"pruned":     color.RedString,
 	"triggered":  color.CyanString,
-	"configured": color.YellowString,
 }
 
 type colorPrinter struct {

@@ -52,8 +52,8 @@ func NewHookExecutor(
 		IOStreams:     streams,
 		DynamicClient: client,
 		Mapper:        mapper,
-		Deleter:       deletions.NewDeleter(streams, client, printer, dryRun),
-		Waiter:        wait.NewDefaultWaiter(streams),
+		Deleter:       deletions.NewSilentDeleter(streams, client, dryRun),
+		Waiter:        wait.NewWaiter(streams, printer.WithOperation("completed")),
 		Printer:       printer.WithOperation("triggered"),
 		DryRun:        dryRun,
 	}

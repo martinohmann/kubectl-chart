@@ -34,13 +34,19 @@ type deleter struct {
 	DryRun bool
 }
 
+// NewSilentDeleter creates a new resource deleter that does not print deleted
+// objects.
+func NewSilentDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, dryRun bool) Deleter {
+	return NewDeleter(streams, client, printers.NewDiscardingContextPrinter(), dryRun)
+}
+
 // NewDeleter creates a new resource deleter.
 func NewDeleter(streams genericclioptions.IOStreams, client dynamic.Interface, printer printers.ContextPrinter, dryRun bool) Deleter {
 	return &deleter{
 		IOStreams:     streams,
 		DynamicClient: client,
 		DryRun:        dryRun,
-		Waiter:        wait.NewDefaultWaiter(streams),
+		Waiter:        wait.NewSilentWaiter(streams),
 		Printer:       printer.WithOperation("deleted"),
 	}
 }
