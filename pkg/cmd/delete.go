@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
@@ -48,6 +49,7 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	o.PrintFlags.AddFlags(cmd)
 
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
+	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, chart resources will be pruned by their chart label. This also removes resources not present in the chart anymore")
 
 	return cmd
 }
@@ -59,14 +61,16 @@ type DeleteOptions struct {
 	HookFlags  HookFlags
 	PrintFlags PrintFlags
 	DryRun     bool
+	Prune      bool
 
-	DynamicClient  dynamic.Interface
-	BuilderFactory func() *resource.Builder
-	Mapper         meta.RESTMapper
-	Encoder        resources.Encoder
-	Visitor        chart.Visitor
-	HookExecutor   chart.HookExecutor
-	Deleter        deletions.Deleter
+	DynamicClient   dynamic.Interface
+	DiscoveryClient discovery.CachedDiscoveryInterface
+	BuilderFactory  func() *resource.Builder
+	Mapper          meta.RESTMapper
+	Encoder         resources.Encoder
+	Visitor         chart.Visitor
+	HookExecutor    chart.HookExecutor
+	Deleter         deletions.Deleter
 
 	Namespace        string
 	EnforceNamespace bool
@@ -96,6 +100,11 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	o.DynamicClient, err = dynamic.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	o.DiscoveryClient, err = f.ToDiscoveryClient()
 	if err != nil {
 		return err
 	}
@@ -137,8 +146,19 @@ func (o *DeleteOptions) Run() error {
 			return err
 		}
 
-		resources.SortByKind(c.Resources, resources.DeleteOrder)
+		return o.DeleteChart(c)
+	})
+}
 
+func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
+	var err error
+	var infos []*resource.Info
+
+	if o.Prune {
+		finder := resources.NewFinder(o.DiscoveryClient, o.DynamicClient, o.Mapper)
+
+		infos, err = finder.FindByLabelSelector(chart.LabelSelector(c))
+	} else {
 		buf, err := o.Encoder.Encode(c.Resources)
 		if err != nil {
 			return err
@@ -152,45 +172,48 @@ func (o *DeleteOptions) Run() error {
 			Flatten().
 			Do().
 			IgnoreErrors(errors.IsNotFound)
-		if err := result.Err(); err != nil {
+		if err = result.Err(); err != nil {
 			return err
 		}
 
-		infos, err := result.Infos()
-		if err != nil {
-			return err
-		}
+		infos, err = result.Infos()
+	}
 
-		if len(infos) == 0 {
-			return nil
-		}
+	if err != nil {
+		return err
+	}
 
-		err = o.HookExecutor.ExecHooks(c, hook.PreDelete)
-		if err != nil {
-			return err
-		}
+	if len(infos) == 0 {
+		return nil
+	}
 
-		err = o.Deleter.Delete(resource.InfoListVisitor(infos))
-		if err != nil {
-			return err
-		}
+	resources.SortInfosByKind(infos, resources.DeleteOrder)
 
-		err = o.HookExecutor.ExecHooks(c, hook.PostDelete)
-		if err != nil {
-			return err
-		}
+	err = o.HookExecutor.ExecHooks(c, hook.PreDelete)
+	if err != nil {
+		return err
+	}
 
-		deletedObjs := resources.ToObjectList(infos)
-		if len(deletedObjs) == 0 {
-			return nil
-		}
+	err = o.Deleter.Delete(resource.InfoListVisitor(infos))
+	if err != nil {
+		return err
+	}
 
-		pvcPruner := &statefulset.PersistentVolumeClaimPruner{
-			Deleter:       o.Deleter,
-			DynamicClient: o.DynamicClient,
-			Mapper:        o.Mapper,
-		}
+	err = o.HookExecutor.ExecHooks(c, hook.PostDelete)
+	if err != nil {
+		return err
+	}
 
-		return pvcPruner.PruneClaims(deletedObjs)
-	})
+	deletedObjs := resources.ToObjectList(infos)
+	if len(deletedObjs) == 0 {
+		return nil
+	}
+
+	pvcPruner := &statefulset.PersistentVolumeClaimPruner{
+		Deleter:       o.Deleter,
+		DynamicClient: o.DynamicClient,
+		Mapper:        o.Mapper,
+	}
+
+	return pvcPruner.PruneClaims(deletedObjs)
 }

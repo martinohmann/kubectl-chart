@@ -64,6 +64,7 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 	cmd.Flags().BoolVar(&o.ServerDryRun, "server-dry-run", o.ServerDryRun, "If true, request will be sent to server with dry-run flag, which means the modifications won't be persisted. This is an alpha feature and flag.")
 	cmd.Flags().BoolVar(&o.DryRun, "dry-run", o.DryRun, "If true, only print the object that would be sent, without sending it. Warning: --dry-run cannot accurately output the result of merging the local manifest and the server-side data. Use --server-dry-run to get the merged result instead.")
 	cmd.Flags().BoolVar(&o.ShowDiff, "diff", o.ShowDiff, "If set, a diff for all resources will be displayed")
+	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, chart resources not present anymore in the rendered chart manifest will be pruned by their chart label.")
 
 	return cmd
 }
@@ -78,6 +79,7 @@ type ApplyOptions struct {
 	DryRun       bool
 	ServerDryRun bool
 	ShowDiff     bool
+	Prune        bool
 
 	Printer         printers.ContextPrinter
 	Recorder        recorders.OperationRecorder
@@ -101,6 +103,7 @@ func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 		DiffFlags: NewDefaultDiffFlags(),
 		Recorder:  recorders.NewOperationRecorder(),
 		Encoder:   yaml.NewSerializer(),
+		Prune:     true,
 	}
 }
 
@@ -204,11 +207,25 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
-		objs := c.Resources
+		if len(c.Resources) == 0 {
+			if !o.Prune {
+				return nil
+			}
 
-		if len(objs) == 0 {
-			// we bail out early if there are no objects to apply.
-			return nil
+			// try to prune deleted resources
+			// TODO(mohmann): this needs refactoring
+			deleteOptions := &DeleteOptions{
+				DynamicClient:   o.DynamicClient,
+				DiscoveryClient: o.DiscoveryClient,
+				Mapper:          o.Mapper,
+				DryRun:          o.DryRun || o.ServerDryRun,
+				Deleter:         o.Deleter,
+				HookExecutor:    o.HookExecutor,
+				HookFlags:       HookFlags{NoHooks: true},
+				Prune:           true,
+			}
+
+			return deleteOptions.DeleteChart(c)
 		}
 
 		if o.ShowDiff {
@@ -218,7 +235,7 @@ func (o *ApplyOptions) Run() error {
 			}
 		}
 
-		buf, err := o.Encoder.Encode(objs)
+		buf, err := o.Encoder.Encode(c.Resources)
 		if err != nil {
 			return err
 		}
@@ -279,7 +296,7 @@ func (o *ApplyOptions) createApplier(c *chart.Chart, filename string) *apply.App
 		ServerDryRun: o.ServerDryRun,
 		Overwrite:    true,
 		OpenAPIPatch: true,
-		Prune:        true,
+		Prune:        o.Prune,
 		Selector:     chart.LabelSelector(c),
 		DeleteOptions: &delete.DeleteOptions{
 			Cascade:     true,
