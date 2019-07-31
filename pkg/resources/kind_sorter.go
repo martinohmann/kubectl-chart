@@ -1,13 +1,12 @@
 package resources
 
-// Adapted from https://github.com/helm/helm/blob/master/pkg/tiller/kind_sorter.go
-
 import (
 	"reflect"
 	"sort"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/cli-runtime/pkg/resource"
 )
 
 // Order is a slice of strings that defines the ordering of resources.
@@ -75,42 +74,49 @@ var DeleteOrder Order = []string{
 	"Namespace",
 }
 
-type kindSorter struct {
-	order            map[string]int
-	objs             []runtime.Object
-	metadataAccessor meta.MetadataAccessor
-	sortForDeletion  bool
+// SortByKind sorts a slice of runtime.Object in the given order.
+func SortByKind(objs []runtime.Object, order Order) []runtime.Object {
+	c := newKindComparator(order)
+
+	sort.Slice(objs, func(i, j int) bool {
+		return c.less(objs[i], objs[j])
+	})
+
+	return objs
 }
 
-func newKindSorter(objs []runtime.Object, order Order) *kindSorter {
+// SortInfosByKind sorts a slice of *resource.Info in the given order.
+func SortInfosByKind(infos []*resource.Info, order Order) []*resource.Info {
+	c := newKindComparator(order)
+
+	sort.Slice(infos, func(i, j int) bool {
+		return c.less(infos[i].Object, infos[j].Object)
+	})
+
+	return infos
+}
+
+func newKindComparator(order Order) *kindComparator {
 	o := make(map[string]int)
 
 	for k, v := range order {
 		o[v] = k
 	}
 
-	return &kindSorter{
-		objs:             objs,
+	return &kindComparator{
 		metadataAccessor: meta.NewAccessor(),
 		sortForDeletion:  reflect.DeepEqual(order, DeleteOrder),
 		order:            o,
 	}
 }
 
-// Len implements Len from sort.Interface.
-func (s *kindSorter) Len() int {
-	return len(s.objs)
+type kindComparator struct {
+	order            map[string]int
+	metadataAccessor meta.MetadataAccessor
+	sortForDeletion  bool
 }
 
-// Swap implements Swap from sort.Interface.
-func (s *kindSorter) Swap(i, j int) {
-	s.objs[i], s.objs[j] = s.objs[j], s.objs[i]
-}
-
-// Less implements Less from sort.Interface.
-func (s *kindSorter) Less(i, j int) bool {
-	a, b := s.objs[i], s.objs[j]
-
+func (s *kindComparator) less(a, b runtime.Object) bool {
 	gvkA := a.GetObjectKind().GroupVersionKind()
 	gvkB := b.GetObjectKind().GroupVersionKind()
 
@@ -141,13 +147,4 @@ func (s *kindSorter) Less(i, j int) bool {
 	}
 
 	return posA < posB
-}
-
-// SortByKind sorts a slice of runtime.Object in the given order.
-func SortByKind(objs []runtime.Object, order Order) []runtime.Object {
-	s := newKindSorter(objs, order)
-
-	sort.Sort(s)
-
-	return objs
 }
