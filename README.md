@@ -44,13 +44,13 @@ Features
 - Configurable pruning of PVC of deleted StatefulSets
 - Dumping of merged chart values for debugging
 - Color indicators for printed resource operations to increase visibility
+- Delete chart resources by selector
 
 Roadmap / Planned features
 --------------------------
 
 - Full integration test coverage
 - Listing all deployed resources of a chart (similar to `kubectl get all` with filter)
-- Delete chart resources by selector
 - Automatic PersistentVolumeClaim resizing
 - Optional rollback of partially applied changes on failure
 
