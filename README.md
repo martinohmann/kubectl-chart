@@ -5,6 +5,7 @@ kubectl-chart
 [![codecov](https://codecov.io/gh/martinohmann/kubectl-chart/branch/master/graph/badge.svg)](https://codecov.io/gh/martinohmann/kubectl-chart)
 [![Go Report Card](https://goreportcard.com/badge/github.com/martinohmann/kubectl-chart?style=flat)](https://goreportcard.com/report/github.com/martinohmann/kubectl-chart)
 [![GoDoc](https://godoc.org/github.com/martinohmann/kubectl-chart?status.svg)](https://godoc.org/github.com/martinohmann/kubectl-chart)
+[![GitHub release](https://img.shields.io/github/release/martinohmann/kubectl-chart)](https://godoc.org/github.com/martinohmann/kubectl-chart/releases)
 
 A `kubectl` plugin to ease management of cluster components using helm charts.
 Minimum required Kubernetes version currently is 1.13 for `kubectl-chart` to
@@ -75,7 +76,7 @@ This will install the `kubectl-chart` binary to `$GOPATH/bin/kubectl-chart`.
 Currently only Linux and MacOSX are packaged as binary releases.
 
 ```
-curl -SsL -o kubectl-chart "https://github.com/martinohmann/kubectl-chart/releases/download/v0.0.1/kubectl-chart_0.0.1_$(uname -s | tr '[:upper:]' '[:lower:]')_x86_64"
+curl -SsL -o kubectl-chart "https://github.com/martinohmann/kubectl-chart/releases/download/v0.0.2/kubectl-chart_0.0.2_$(uname -s | tr '[:upper:]' '[:lower:]')_x86_64"
 chmod +x kubectl-chart
 sudo mv kubectl-chart /usr/local/bin
 ```
