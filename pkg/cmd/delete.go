@@ -159,7 +159,9 @@ func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
 
 		infos, err = finder.FindByLabelSelector(chart.LabelSelector(c))
 	} else {
-		buf, err := o.Encoder.Encode(c.Resources)
+		var buf []byte
+
+		buf, err = o.Encoder.Encode(c.Resources)
 		if err != nil {
 			return err
 		}
