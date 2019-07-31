@@ -791,7 +791,7 @@ func TestWaitForCompletion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := test.fakeClient()
 
-			w := NewDefaultWaiter(genericclioptions.NewTestIOStreamsDiscard())
+			w := NewSilentWaiter(genericclioptions.NewTestIOStreamsDiscard())
 
 			req := &Request{
 				Options: &Options{
@@ -909,7 +909,7 @@ func TestWait_Errors(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			w := NewDefaultWaiter(genericclioptions.NewTestIOStreamsDiscard())
+			w := NewSilentWaiter(genericclioptions.NewTestIOStreamsDiscard())
 
 			req := &Request{
 				Options: &test.options,

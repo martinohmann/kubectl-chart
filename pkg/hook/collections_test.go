@@ -65,7 +65,7 @@ func TestMap(t *testing.T) {
 			newUnstructured("bar", PostApply),
 			newUnstructured("baz", PostApply),
 		},
-		m.ToObjectList(),
+		m.All().ToObjectList(),
 	)
 }
 

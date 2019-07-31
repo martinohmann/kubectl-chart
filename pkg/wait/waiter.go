@@ -107,8 +107,8 @@ type waiter struct {
 	Printer printers.ResourcePrinter
 }
 
-// NewDefaultWaiter creates a new Waiter which discards all wait output.
-func NewDefaultWaiter(streams genericclioptions.IOStreams) Waiter {
+// NewSilentWaiter creates a new Waiter which discards all wait output.
+func NewSilentWaiter(streams genericclioptions.IOStreams) Waiter {
 	return NewWaiter(streams, printers.NewDiscardingPrinter())
 }
 

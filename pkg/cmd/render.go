@@ -107,7 +107,7 @@ func (o *RenderOptions) selectResources(c *chart.Chart) []runtime.Object {
 	}
 
 	if o.HookType == "all" {
-		return c.Hooks.ToObjectList()
+		return c.Hooks.All().ToObjectList()
 	}
 
 	return c.Hooks[o.HookType].ToObjectList()

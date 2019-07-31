@@ -5,14 +5,14 @@ import "k8s.io/apimachinery/pkg/runtime"
 // Map is a map of hook type to lists of hooks.
 type Map map[string]List
 
-// ToObjectList converts m to a slice of runtime.Object.
-func (m Map) ToObjectList() []runtime.Object {
-	objs := make([]runtime.Object, 0)
+// All returns all hooks contained in the m as a List.
+func (m Map) All() List {
+	hooks := make(List, 0)
 	for _, s := range m {
-		objs = append(objs, s.ToObjectList()...)
+		hooks = append(hooks, s...)
 	}
 
-	return objs
+	return hooks
 }
 
 // Add adds hooks to the map and puts them into the buckets determined by their
