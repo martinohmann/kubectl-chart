@@ -7,9 +7,19 @@ import (
 
 	"github.com/martinohmann/kubectl-chart/pkg/version"
 	"github.com/spf13/cobra"
-	yaml "gopkg.in/yaml.v2"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"sigs.k8s.io/yaml"
+)
+
+var (
+	// ErrIllegalVersionFlagCombination is returned if mutual exclusive version
+	// format flags are set.
+	ErrIllegalVersionFlagCombination = errors.New("--short and --output can't be used together")
+
+	// ErrInvalidOutputFormat is returned if the output format flag contains an
+	// invalid value.
+	ErrInvalidOutputFormat = errors.New("--output must be 'yaml' or 'json'")
 )
 
 func NewVersionCmd(streams genericclioptions.IOStreams) *cobra.Command {
@@ -49,8 +59,12 @@ func NewVersionOptions(streams genericclioptions.IOStreams) *VersionOptions {
 }
 
 func (o *VersionOptions) Validate() error {
+	if o.Short && o.Output != "" {
+		return ErrIllegalVersionFlagCombination
+	}
+
 	if o.Output != "" && o.Output != "yaml" && o.Output != "json" {
-		return errors.New("--output must be 'yaml' or 'json'")
+		return ErrInvalidOutputFormat
 	}
 
 	return nil

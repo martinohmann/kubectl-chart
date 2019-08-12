@@ -64,7 +64,7 @@ type DeleteOptions struct {
 	Prune      bool
 
 	DynamicClient   dynamic.Interface
-	DiscoveryClient discovery.CachedDiscoveryInterface
+	DiscoveryClient discovery.DiscoveryInterface
 	BuilderFactory  func() *resource.Builder
 	Mapper          meta.RESTMapper
 	Encoder         resources.Encoder
@@ -95,13 +95,16 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	config, err := f.ToRESTConfig()
-	if err != nil {
-	}
+	if o.DynamicClient == nil {
+		config, err := f.ToRESTConfig()
+		if err != nil {
+			return err
+		}
 
-	o.DynamicClient, err = dynamic.NewForConfig(config)
-	if err != nil {
-		return err
+		o.DynamicClient, err = dynamic.NewForConfig(config)
+		if err != nil {
+			return err
+		}
 	}
 
 	o.DiscoveryClient, err = f.ToDiscoveryClient()

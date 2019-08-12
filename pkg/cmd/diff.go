@@ -9,6 +9,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
@@ -19,6 +20,15 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util/openapi"
 )
+
+// DryRunVerifier verifies if a given group-version-kind supports DryRun
+// against the current server. Sending dryRun requests to apiserver that
+// don't support it will result in objects being unwillingly persisted.
+type DryRunVerifier interface {
+	// HasSupport verifies if the given gvk supports DryRun. An error is
+	// returned if it doesn't.
+	HasSupport(gvk schema.GroupVersionKind) error
+}
 
 func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewDiffOptions(streams)
@@ -52,7 +62,8 @@ type DiffOptions struct {
 	DiffFlags  DiffFlags
 
 	OpenAPISchema  openapi.Resources
-	DryRunVerifier *apply.DryRunVerifier
+	DryRunVerifier DryRunVerifier
+	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
 	DiffPrinter    diff.Printer
 	Encoder        resources.Encoder
@@ -83,17 +94,19 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	config, err := f.ToRESTConfig()
-	if err != nil {
-	}
+	if o.DynamicClient == nil {
+		config, err := f.ToRESTConfig()
+		if err != nil {
+		}
 
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return err
+		o.DynamicClient, err = dynamic.NewForConfig(config)
+		if err != nil {
+			return err
+		}
 	}
 
 	o.DryRunVerifier = &apply.DryRunVerifier{
-		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(dynamicClient)),
+		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
 		OpenAPIGetter: discoveryClient,
 	}
 
@@ -227,12 +240,11 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 		LabelSelectorParam(chart.LabelSelector(c)).
 		ResourceTypeOrNameArgs(true, "all").
 		Flatten().
-		Do()
+		Do().
+		IgnoreErrors(errors.IsNotFound)
 	if err := r.Err(); err != nil {
 		return err
 	}
-
-	chartObjs := c.Resources
 
 	return r.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
@@ -241,7 +253,7 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 
 		infoObj := kdiff.InfoObject{Info: info}
 
-		_, found := resources.FindMatchingObject(chartObjs, infoObj.Live())
+		_, found := resources.FindMatchingObject(c.Resources, infoObj.Live())
 		if found {
 			// Objects still present in the chart do not need to be diffed
 			// again as this already happened in diffRenderedResources.
