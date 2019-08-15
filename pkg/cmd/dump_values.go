@@ -8,10 +8,10 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/helm/pkg/chartutil"
-	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
