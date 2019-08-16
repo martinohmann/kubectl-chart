@@ -9,8 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestSerializer_Encode(t *testing.T) {
-	s := NewSerializer()
+func TestEncoder_Encode(t *testing.T) {
+	e := NewEncoder()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -18,7 +18,7 @@ func TestSerializer_Encode(t *testing.T) {
 				return
 			}
 
-			buf, err := s.Encode(tc.objs)
+			buf, err := e.Encode(tc.objs)
 
 			require.NoError(t, err)
 			assert.Equal(t, string(tc.raw), string(buf))
@@ -26,20 +26,20 @@ func TestSerializer_Encode(t *testing.T) {
 	}
 }
 
-func TestSerializer_EncodeErrors(t *testing.T) {
-	s := NewSerializer()
+func TestEncoder_EncodeErrors(t *testing.T) {
+	e := NewEncoder()
 
 	for _, tc := range encodeErrorCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.Encode(tc.objs)
+			_, err := e.Encode(tc.objs)
 
 			require.Error(t, err)
 		})
 	}
 }
 
-func TestSerializer_Decode(t *testing.T) {
-	s := NewSerializer()
+func TestDecoder_Decode(t *testing.T) {
+	d := NewDecoder()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestSerializer_Decode(t *testing.T) {
 				return
 			}
 
-			objs, err := s.Decode(tc.raw)
+			objs, err := d.Decode(tc.raw)
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.objs, objs)
@@ -55,12 +55,12 @@ func TestSerializer_Decode(t *testing.T) {
 	}
 }
 
-func TestSerializer_DecodeError(t *testing.T) {
-	s := NewSerializer()
+func TestDecoder_DecodeError(t *testing.T) {
+	d := NewDecoder()
 
 	for _, tc := range decodeErrorCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.Decode(tc.raw)
+			_, err := d.Decode(tc.raw)
 
 			require.Error(t, err)
 		})

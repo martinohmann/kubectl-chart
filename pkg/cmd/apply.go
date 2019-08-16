@@ -109,7 +109,7 @@ func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 		IOStreams: streams,
 		DiffFlags: NewDefaultDiffFlags(),
 		Recorder:  recorders.NewOperationRecorder(),
-		Encoder:   yaml.NewSerializer(),
+		Encoder:   yaml.NewEncoder(),
 		Prune:     true,
 	}
 }

@@ -59,7 +59,7 @@ type RenderOptions struct {
 func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 	return &RenderOptions{
 		IOStreams: streams,
-		Encoder:   yaml.NewSerializer(),
+		Encoder:   yaml.NewEncoder(),
 	}
 }
 

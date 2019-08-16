@@ -81,7 +81,7 @@ type DeleteOptions struct {
 func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 	return &DeleteOptions{
 		IOStreams: streams,
-		Encoder:   yaml.NewSerializer(),
+		Encoder:   yaml.NewEncoder(),
 	}
 }
 
