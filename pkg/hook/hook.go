@@ -51,7 +51,7 @@ func New(obj runtime.Object) (*Hook, error) {
 
 	err := Validate(h)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "invalid hook %q", h.GetName())
 	}
 
 	return h, nil
@@ -129,28 +129,28 @@ func IsSupportedType(typ string) bool {
 // or if other resource fields have unsupported values.
 func Validate(h *Hook) error {
 	if h.GetKind() != jobGK.Kind {
-		return UnsupportedKindError{Kind: h.GetKind()}
+		return NewUnsupportedKindError(h.GetKind())
 	}
 
 	if !IsSupportedType(h.Type()) {
-		return UnsupportedTypeError{Type: h.Type()}
+		return NewUnsupportedTypeError(h.Type())
 	}
 
 	if h.restartPolicy() != corev1.RestartPolicyNever {
-		return errors.Errorf("invalid hook %q: restartPolicy of the pod template must be %q", h.GetName(), corev1.RestartPolicyNever)
+		return NewUnsupportedRestartPolicyError(h.restartPolicy())
 	}
 
 	if h.NoWait() && h.AllowFailure() {
-		return errors.Errorf("invalid hook %q: %s and %s cannot be true at the same time", h.GetName(), meta.AnnotationHookNoWait, meta.AnnotationHookAllowFailure)
+		return NewIllegalAnnotationCombinationError(meta.AnnotationHookNoWait, meta.AnnotationHookAllowFailure)
 	}
 
 	timeout, err := h.WaitTimeout()
 	if err != nil {
-		return errors.Wrapf(err, "invalid hook %q: malformed %s annotation", h.GetName(), meta.AnnotationHookWaitTimeout)
+		return errors.Wrapf(err, "malformed annotation %q", meta.AnnotationHookWaitTimeout)
 	}
 
 	if h.NoWait() && timeout > 0 {
-		return errors.Errorf("invalid hook %q: %s and %s cannot be set at the same time", h.GetName(), meta.AnnotationHookNoWait, meta.AnnotationHookWaitTimeout)
+		return NewIllegalAnnotationCombinationError(meta.AnnotationHookNoWait, meta.AnnotationHookWaitTimeout)
 	}
 
 	return err
