@@ -96,7 +96,7 @@ type ApplyOptions struct {
 	BuilderFactory  func() *resource.Builder
 	Encoder         resources.Encoder
 	Visitor         chart.Visitor
-	HookExecutor    chart.HookExecutor
+	HookExecutor    *chart.HookExecutor
 	Deleter         deletions.Deleter
 
 	Namespace        string
@@ -176,9 +176,7 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		dryRun,
 	)
 
-	if o.HookFlags.NoHooks {
-		o.HookExecutor = &chart.NoopHookExecutor{}
-	} else {
+	if !o.HookFlags.NoHooks {
 		o.HookExecutor = chart.NewHookExecutor(
 			o.IOStreams,
 			o.DynamicClient,
