@@ -20,17 +20,8 @@ import (
 
 var jobGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 
-// HookExecutor executes chart lifecycle hooks
-type HookExecutor interface {
-	// ExecHooks takes a chart and executes all hooks of type hookType that are
-	// defined in the chart. Depending on the configuration of the hooks it may
-	// returns errors if hooks fail or not. Should return all other errors that
-	// occur while hook execution.
-	ExecHooks(c *Chart, hookType string) error
-}
-
-// hookExecutor executes chart lifecycle hooks.
-type hookExecutor struct {
+// HookExecutor executes chart lifecycle hooks.
+type HookExecutor struct {
 	genericclioptions.IOStreams
 	DynamicClient dynamic.Interface
 	Mapper        meta.RESTMapper
@@ -40,15 +31,15 @@ type hookExecutor struct {
 	DryRun        bool
 }
 
-// NewHookExecutor creates a new HookExecutor.
+// NewHookExecutor creates a new *HookExecutor.
 func NewHookExecutor(
 	streams genericclioptions.IOStreams,
 	client dynamic.Interface,
 	mapper meta.RESTMapper,
 	printer printers.ContextPrinter,
 	dryRun bool,
-) HookExecutor {
-	return &hookExecutor{
+) *HookExecutor {
+	return &HookExecutor{
 		IOStreams:     streams,
 		DynamicClient: client,
 		Mapper:        mapper,
@@ -62,7 +53,11 @@ func NewHookExecutor(
 // ExecHooks executes hooks of hookType from chart c. It will attempt to delete
 // job hooks matching a label selector that are already deployed to the cluster
 // before creating the hooks to prevent errors.
-func (e *hookExecutor) ExecHooks(c *Chart, hookType string) error {
+func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
+	if e == nil {
+		return nil
+	}
+
 	hooks := c.Hooks[hookType]
 
 	if len(hooks) == 0 {
@@ -79,7 +74,7 @@ func (e *hookExecutor) ExecHooks(c *Chart, hookType string) error {
 	resourceOptions := make(wait.ResourceOptions)
 
 	err = hooks.EachItem(func(h *hook.Hook) error {
-		e.PrintHook(h)
+		e.printHook(h)
 
 		if e.DryRun {
 			return nil
@@ -146,7 +141,7 @@ func (e *hookExecutor) ExecHooks(c *Chart, hookType string) error {
 	return e.waitForCompletion(infos, resourceOptions)
 }
 
-func (e *hookExecutor) cleanupHooks(chartName, hookType string) error {
+func (e *HookExecutor) cleanupHooks(chartName, hookType string) error {
 	objs, err := e.DynamicClient.
 		Resource(jobGVR).
 		Namespace(metav1.NamespaceAll).
@@ -169,7 +164,7 @@ func (e *hookExecutor) cleanupHooks(chartName, hookType string) error {
 	return e.Deleter.Delete(resource.InfoListVisitor(infos))
 }
 
-func (e *hookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {
+func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.ResourceOptions) error {
 	if len(infos) == 0 {
 		return nil
 	}
@@ -189,8 +184,8 @@ func (e *hookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 	return err
 }
 
-// PrintHook prints a hooks.
-func (e *hookExecutor) PrintHook(h *hook.Hook) error {
+// printHook prints a hooks.
+func (e *HookExecutor) printHook(h *hook.Hook) error {
 	options := make([]string, 0)
 
 	if timeout, _ := h.WaitTimeout(); timeout > 0 {
@@ -206,12 +201,4 @@ func (e *hookExecutor) PrintHook(h *hook.Hook) error {
 	}
 
 	return e.Printer.WithContext(options...).PrintObj(h, e.Out)
-}
-
-// NoopHookExecutor does not execute any hooks.
-type NoopHookExecutor struct{}
-
-// ExecHooks implements HookExecutor.
-func (e *NoopHookExecutor) ExecHooks(*Chart, string) error {
-	return nil
 }

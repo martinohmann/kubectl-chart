@@ -15,6 +15,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/martinohmann/kubectl-chart/pkg/printers"
 	"github.com/martinohmann/kubectl-chart/pkg/wait"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
@@ -410,7 +411,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			deleter := deletions.NewFakeDeleter()
 			waiter := wait.NewFakeWaiter()
 
-			e := &hookExecutor{
+			e := &HookExecutor{
 				IOStreams:     genericclioptions.NewTestIOStreamsDiscard(),
 				Deleter:       deleter,
 				Waiter:        waiter,
@@ -446,6 +447,12 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHookExecutor_ExecHooks_Nil(t *testing.T) {
+	var executor *HookExecutor
+
+	assert.NoError(t, executor.ExecHooks(&Chart{}, hook.PreApply))
 }
 
 func newTestChart(hooks hook.Map) *Chart {
