@@ -43,17 +43,21 @@ func (f *testFactoryWithFakeDiscovery) ToDiscoveryClient() (discovery.CachedDisc
 	return f.TestFactory.ToDiscoveryClient()
 }
 
-func newTestFactoryWithFakeDiscovery() *testFactoryWithFakeDiscovery {
+func newTestFactoryWithFakeDiscovery(fakeDiscovery *fakediscovery.FakeDiscovery) *testFactoryWithFakeDiscovery {
+	if fakeDiscovery == nil {
+		fakeDiscovery = &fakediscovery.FakeDiscovery{Fake: &clienttesting.Fake{}}
+	}
+
 	return &testFactoryWithFakeDiscovery{
 		TestFactory:   cmdtesting.NewTestFactory().WithNamespace("test"),
-		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &clienttesting.Fake{}},
+		FakeDiscovery: fakeDiscovery,
 	}
 }
 
 func TestApplyCmd(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
-	f := newTestFactoryWithFakeDiscovery()
+	f := newTestFactoryWithFakeDiscovery(nil)
 	f.UnstructuredClient = &fake.RESTClient{
 		NegotiatedSerializer: resource.UnstructuredPlusDefaultContentConfig().NegotiatedSerializer,
 		Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -109,7 +113,7 @@ func TestApplyCmd(t *testing.T) {
 
 	o.DryRun = true
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
-	o.DynamicClient = dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
+	o.DynamicClientGetter.Client = dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
 
 	require.NoError(t, o.Complete(f))
 

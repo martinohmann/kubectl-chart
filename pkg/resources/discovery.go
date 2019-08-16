@@ -18,19 +18,17 @@ var DefaultSupportedVerbs = metav1.Verbs{"get", "update", "list", "delete", "wat
 
 // Finder is a resource finder.
 type Finder struct {
-	DiscoveryClient discovery.DiscoveryInterface
-	DynamicClient   dynamic.Interface
-	Mapper          meta.RESTMapper
-	SupportedVerbs  metav1.Verbs
+	DynamicClient    dynamic.Interface
+	MappingDiscovery *MappingDiscovery
+	SupportedVerbs   metav1.Verbs
 }
 
 // NewFinder creates a new *Finder value.
 func NewFinder(client discovery.DiscoveryInterface, dynamicClient dynamic.Interface, mapper meta.RESTMapper) *Finder {
 	return &Finder{
-		DiscoveryClient: client,
-		DynamicClient:   dynamicClient,
-		Mapper:          mapper,
-		SupportedVerbs:  DefaultSupportedVerbs,
+		DynamicClient:    dynamicClient,
+		MappingDiscovery: NewMappingDiscovery(client, mapper),
+		SupportedVerbs:   DefaultSupportedVerbs,
 	}
 }
 
@@ -38,7 +36,7 @@ func NewFinder(client discovery.DiscoveryInterface, dynamicClient dynamic.Interf
 // returns the resource infos for them. It will only include resources that do
 // at least support the verbs specified in f.SupportedVerbs.
 func (f *Finder) FindByLabelSelector(selector string) ([]*resource.Info, error) {
-	mappings, err := f.getMappings()
+	mappings, err := f.MappingDiscovery.DiscoverForVerbs(f.SupportedVerbs)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +81,25 @@ func (f *Finder) FindByLabelSelector(selector string) ([]*resource.Info, error) 
 	return infos, nil
 }
 
-func (f *Finder) getMappings() ([]*meta.RESTMapping, error) {
-	_, lists, err := f.DiscoveryClient.ServerGroupsAndResources()
+// MappingDiscovery discovers the REST mappings for available resources.
+type MappingDiscovery struct {
+	Client discovery.DiscoveryInterface
+	Mapper meta.RESTMapper
+}
+
+// NewMappingDiscovery creates a new *MappingDiscovery value with given
+// discovery client and REST mapper.
+func NewMappingDiscovery(client discovery.DiscoveryInterface, mapper meta.RESTMapper) *MappingDiscovery {
+	return &MappingDiscovery{
+		Client: client,
+		Mapper: mapper,
+	}
+}
+
+// DiscoverForVerbs discovers all resources that support at least the passed in
+// verbs and returns their REST mappings.
+func (d *MappingDiscovery) DiscoverForVerbs(verbs metav1.Verbs) ([]*meta.RESTMapping, error) {
+	_, lists, err := d.Client.ServerGroupsAndResources()
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +115,9 @@ func (f *Finder) getMappings() ([]*meta.RESTMapping, error) {
 				continue
 			}
 
-			verbs := sets.NewString(resource.Verbs...)
+			resourceVerbs := sets.NewString(resource.Verbs...)
 
-			if len(f.SupportedVerbs) > 0 && !verbs.HasAll(f.SupportedVerbs...) {
+			if len(verbs) > 0 && !resourceVerbs.HasAll(verbs...) {
 				continue
 			}
 
@@ -120,7 +135,7 @@ func (f *Finder) getMappings() ([]*meta.RESTMapping, error) {
 				continue
 			}
 
-			mapping, err := f.Mapper.RESTMapping(gk)
+			mapping, err := d.Mapper.RESTMapping(gk)
 			if err != nil {
 				return nil, err
 			}

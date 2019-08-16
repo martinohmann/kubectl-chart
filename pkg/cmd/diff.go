@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 	"k8s.io/kubectl/pkg/cmd/apply"
 	kdiff "k8s.io/kubectl/pkg/cmd/diff"
@@ -57,13 +56,13 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 
 type DiffOptions struct {
 	genericclioptions.IOStreams
+	DynamicClientGetter
 
 	ChartFlags ChartFlags
 	DiffFlags  DiffFlags
 
 	OpenAPISchema  openapi.Resources
 	DryRunVerifier DryRunVerifier
-	DynamicClient  dynamic.Interface
 	BuilderFactory func() *resource.Builder
 	DiffPrinter    diff.Printer
 	Encoder        resources.Encoder
@@ -94,19 +93,13 @@ func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	if o.DynamicClient == nil {
-		config, err := f.ToRESTConfig()
-		if err != nil {
-		}
-
-		o.DynamicClient, err = dynamic.NewForConfig(config)
-		if err != nil {
-			return err
-		}
+	dynamicClient, err := o.DynamicClientGetter.Get(f)
+	if err != nil {
+		return err
 	}
 
 	o.DryRunVerifier = &apply.DryRunVerifier{
-		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(o.DynamicClient)),
+		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(dynamicClient)),
 		OpenAPIGetter: discoveryClient,
 	}
 
