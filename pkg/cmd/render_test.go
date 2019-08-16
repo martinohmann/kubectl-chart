@@ -114,7 +114,7 @@ func TestRenderCmd_Validate(t *testing.T) {
 		{
 			name:        "invalid hook type",
 			hookType:    "invalid-hook-type",
-			expectedErr: `unsupported hook type "invalid-hook-type", allowed values are "pre-apply", "post-apply", "pre-delete", "post-delete"`,
+			expectedErr: `unsupported hook type "invalid-hook-type", allowed values are: [pre-apply post-apply pre-delete post-delete]`,
 		},
 	}
 

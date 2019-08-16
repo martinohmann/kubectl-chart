@@ -47,7 +47,7 @@ func (e Encoder) Encode(objs []runtime.Object) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Decoder is a wrapper for a runtime.Decoder with properly decodes multi-YAML
+// Decoder is a wrapper for a runtime.Decoder which properly decodes multi-YAML
 // documents into a slice of runtime.Object.
 type Decoder struct {
 	runtime.Decoder

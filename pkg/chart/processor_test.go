@@ -168,5 +168,5 @@ func TestProcessor_ProcessUnsupportedHook(t *testing.T) {
 	_, err := p.Process(config)
 
 	require.Error(t, err)
-	assert.Equal(t, `while parsing template "chart1/templates/hook.yaml": unsupported hook type "foo", allowed values are "pre-apply", "post-apply", "pre-delete", "post-delete"`, err.Error())
+	assert.Equal(t, `while parsing template "chart1/templates/hook.yaml": invalid hook "foobar-chart1": unsupported hook type "foo", allowed values are: [pre-apply post-apply pre-delete post-delete]`, err.Error())
 }

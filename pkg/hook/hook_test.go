@@ -107,7 +107,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `unsupported hook resource kind "ConfigMap", only "Job" is allowed`,
+			expectedErr: `invalid hook "somehook": unsupported hook resource kind "ConfigMap", only "Job" is allowed`,
 		},
 		{
 			name: "unsupported hook type",
@@ -133,7 +133,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `unsupported hook type "foo", allowed values are "pre-apply", "post-apply", "pre-delete", "post-delete"`,
+			expectedErr: `invalid hook "somehook": unsupported hook type "foo", allowed values are: [pre-apply post-apply pre-delete post-delete]`,
 		},
 		{
 			name: "conflicting annotations",
@@ -159,7 +159,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": kubectl-chart/hook-no-wait and kubectl-chart/hook-allow-failure cannot be true at the same time`,
+			expectedErr: `invalid hook "somehook": annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-allow-failure]`,
 		},
 		{
 			name: "invalid wait timeout",
@@ -185,7 +185,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": malformed kubectl-chart/hook-wait-timeout annotation: time: invalid duration foo`,
+			expectedErr: `invalid hook "somehook": malformed annotation "kubectl-chart/hook-wait-timeout": time: invalid duration foo`,
 		},
 		{
 			name: "conflicting wait annotations",
@@ -211,7 +211,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": kubectl-chart/hook-no-wait and kubectl-chart/hook-wait-timeout cannot be set at the same time`,
+			expectedErr: `invalid hook "somehook": annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-wait-timeout]`,
 		},
 		{
 			name: "unsupported restartPolicy field value",
@@ -236,7 +236,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": restartPolicy of the pod template must be "Never"`,
+			expectedErr: `invalid hook "somehook": unsupported restartPolicy "Always" in the pod template, only "Never" is allowed`,
 		},
 	}
 
