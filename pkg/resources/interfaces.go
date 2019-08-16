@@ -15,9 +15,3 @@ type Decoder interface {
 	// Decode decodes raw bytes into slices of runtime.Object.
 	Decode(raw []byte) ([]runtime.Object, error)
 }
-
-// Serializer can encode and decode slices of runtime.Object.
-type Serializer interface {
-	Encoder
-	Decoder
-}

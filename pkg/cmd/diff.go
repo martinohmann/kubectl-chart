@@ -75,7 +75,7 @@ func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 	return &DiffOptions{
 		IOStreams: streams,
 		DiffFlags: NewDefaultDiffFlags(),
-		Encoder:   yaml.NewSerializer(),
+		Encoder:   yaml.NewEncoder(),
 	}
 }
 

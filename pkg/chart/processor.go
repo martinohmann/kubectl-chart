@@ -27,7 +27,7 @@ func NewProcessor(d resources.Decoder) *Processor {
 
 // NewDefaultProcessor creates a new *Processor value.
 func NewDefaultProcessor() *Processor {
-	return NewProcessor(yaml.NewSerializer())
+	return NewProcessor(yaml.NewDecoder())
 }
 
 // Process takes a chart config, renders and processes it.
