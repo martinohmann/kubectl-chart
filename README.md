@@ -5,7 +5,7 @@ kubectl-chart
 [![codecov](https://codecov.io/gh/martinohmann/kubectl-chart/branch/master/graph/badge.svg)](https://codecov.io/gh/martinohmann/kubectl-chart)
 [![Go Report Card](https://goreportcard.com/badge/github.com/martinohmann/kubectl-chart?style=flat)](https://goreportcard.com/report/github.com/martinohmann/kubectl-chart)
 [![GoDoc](https://godoc.org/github.com/martinohmann/kubectl-chart?status.svg)](https://godoc.org/github.com/martinohmann/kubectl-chart)
-[![GitHub release](https://img.shields.io/github/release/martinohmann/kubectl-chart)](https://godoc.org/github.com/martinohmann/kubectl-chart/releases)
+[![GitHub release](https://img.shields.io/github/release/martinohmann/kubectl-chart)](https://github.com/martinohmann/kubectl-chart/releases)
 
 A `kubectl` plugin to ease management of cluster components using helm charts.
 Minimum required Kubernetes version currently is 1.13 for `kubectl-chart` to
