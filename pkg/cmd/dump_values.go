@@ -14,7 +14,7 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
-func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
+func NewDumpValuesCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewDumpValuesOptions(streams)
 
 	cmd := &cobra.Command{
@@ -31,7 +31,7 @@ func NewDumpValuesCmd(f genericclioptions.RESTClientGetter, streams genericcliop
   kubectl chart dump-values -f ~/charts --recursive --chart-filter mychart`,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cmdutil.CheckErr(o.Complete(f))
+			cmdutil.CheckErr(o.Complete())
 			cmdutil.CheckErr(o.Run())
 		},
 	}
@@ -52,15 +52,10 @@ func NewDumpValuesOptions(streams genericclioptions.IOStreams) *DumpValuesOption
 	}
 }
 
-func (o *DumpValuesOptions) Complete(f genericclioptions.RESTClientGetter) error {
-	var err error
-
+func (o *DumpValuesOptions) Complete() (err error) {
 	o.ChartDir, err = filepath.Abs(o.ChartDir)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return
 }
 func (o *DumpValuesOptions) Run() error {
 	additionalValues, err := chart.LoadValues(o.ValueFiles...)

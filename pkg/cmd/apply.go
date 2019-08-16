@@ -28,6 +28,12 @@ import (
 	"k8s.io/kubectl/pkg/validation"
 )
 
+var (
+	// ErrIllegalDryRunFlagCombination is returned if mutual exclusive dry run
+	// flags are set.
+	ErrIllegalDryRunFlagCombination = errors.Errorf("--dry-run and --server-dry-run can't be used together")
+)
+
 func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewApplyOptions(streams)
 
@@ -84,7 +90,7 @@ type ApplyOptions struct {
 	Printer         printers.ContextPrinter
 	Recorder        recorders.OperationRecorder
 	DynamicClient   dynamic.Interface
-	DiscoveryClient discovery.CachedDiscoveryInterface
+	DiscoveryClient discovery.DiscoveryInterface
 	OpenAPISchema   openapi.Resources
 	Mapper          meta.RESTMapper
 	BuilderFactory  func() *resource.Builder
@@ -109,7 +115,7 @@ func NewApplyOptions(streams genericclioptions.IOStreams) *ApplyOptions {
 
 func (o *ApplyOptions) Validate() error {
 	if o.DryRun && o.ServerDryRun {
-		return errors.Errorf("--dry-run and --server-dry-run can't be used together")
+		return ErrIllegalDryRunFlagCombination
 	}
 
 	return nil
@@ -127,14 +133,16 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	config, err := f.ToRESTConfig()
-	if err != nil {
-		return err
-	}
+	if o.DynamicClient == nil {
+		config, err := f.ToRESTConfig()
+		if err != nil {
+			return err
+		}
 
-	o.DynamicClient, err = dynamic.NewForConfig(config)
-	if err != nil {
-		return err
+		o.DynamicClient, err = dynamic.NewForConfig(config)
+		if err != nil {
+			return err
+		}
 	}
 
 	o.OpenAPISchema, err = openapi.NewOpenAPIGetter(o.DiscoveryClient).Get()
