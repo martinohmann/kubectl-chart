@@ -77,6 +77,7 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 
 type ApplyOptions struct {
 	genericclioptions.IOStreams
+	DynamicClientGetter
 
 	ChartFlags   ChartFlags
 	HookFlags    HookFlags
@@ -133,16 +134,9 @@ func (o *ApplyOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		return err
 	}
 
-	if o.DynamicClient == nil {
-		config, err := f.ToRESTConfig()
-		if err != nil {
-			return err
-		}
-
-		o.DynamicClient, err = dynamic.NewForConfig(config)
-		if err != nil {
-			return err
-		}
+	o.DynamicClient, err = o.DynamicClientGetter.Get(f)
+	if err != nil {
+		return err
 	}
 
 	o.OpenAPISchema, err = openapi.NewOpenAPIGetter(o.DiscoveryClient).Get()

@@ -58,7 +58,7 @@ func TestDeleteCmd(t *testing.T) {
 	o := NewDeleteOptions(genericclioptions.NewTestIOStreamsDiscard())
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
-	o.DynamicClient = fakeClient
+	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
 	require.NoError(t, o.Run())
@@ -99,7 +99,7 @@ func TestDeleteCmd_DryRun(t *testing.T) {
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
 	o.DryRun = true
-	o.DynamicClient = fakeClient
+	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
 	require.NoError(t, o.Run())
@@ -128,10 +128,6 @@ statefulset.apps/chart1 deleted (dry run)
 func TestDeleteCmd_Prune(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
-	f := cmdtesting.NewTestFactory().WithNamespace("test")
-	f.ClientConfigVal = cmdtesting.DefaultClientConfig()
-	defer f.Cleanup()
-
 	fakeClient := dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
 	fakeClient.PrependReactor("list", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, newUnstructuredList(newUnstructuredWithLabels("", "Pod", "ns-foo", "name-foo", map[string]interface{}{"kubectl-chart/chart-name": "chart1"})), nil
@@ -153,16 +149,17 @@ func TestDeleteCmd_Prune(t *testing.T) {
 		},
 	}
 
+	f := newTestFactoryWithFakeDiscovery(fakeDiscovery)
+	f.ClientConfigVal = cmdtesting.DefaultClientConfig()
+	defer f.Cleanup()
+
 	o := NewDeleteOptions(genericclioptions.NewTestIOStreamsDiscard())
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
 	o.Prune = true
-	o.DynamicClient = fakeClient
+	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
-
-	o.DiscoveryClient = fakeDiscovery
-
 	require.NoError(t, o.Run())
 
 	actions := fakeClient.Actions()

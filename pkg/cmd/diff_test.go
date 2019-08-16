@@ -8,11 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
-	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/rest/fake"
 	cmdtesting "k8s.io/kubectl/pkg/cmd/testing"
 )
@@ -26,7 +24,7 @@ func TestDiffCmd(t *testing.T) {
 
 	servicePatchCount := 0
 
-	f := newTestFactoryWithFakeDiscovery()
+	f := newTestFactoryWithFakeDiscovery(nil)
 	f.UnstructuredClient = &fake.RESTClient{
 		NegotiatedSerializer: resource.UnstructuredPlusDefaultContentConfig().NegotiatedSerializer,
 		Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -99,7 +97,6 @@ func TestDiffCmd(t *testing.T) {
 	o := NewDiffOptions(streams)
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
-	o.DynamicClient = dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
 
 	require.NoError(t, o.Complete(f))
 

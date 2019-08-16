@@ -463,12 +463,12 @@ func TestFinder_FindByLabelSelector(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeClient := tc.fakeClient()
 			fakeDiscovery := tc.fakeDiscovery()
+			testMapper := testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme)
 
 			f := &Finder{
-				DynamicClient:   fakeClient,
-				DiscoveryClient: fakeDiscovery,
-				Mapper:          testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme),
-				SupportedVerbs:  tc.verbs,
+				DynamicClient:    fakeClient,
+				SupportedVerbs:   tc.verbs,
+				MappingDiscovery: NewMappingDiscovery(fakeDiscovery, testMapper),
 			}
 
 			infos, err := f.FindByLabelSelector(tc.selector)

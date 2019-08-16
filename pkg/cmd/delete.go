@@ -56,6 +56,7 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 type DeleteOptions struct {
 	genericclioptions.IOStreams
+	DynamicClientGetter
 
 	ChartFlags ChartFlags
 	HookFlags  HookFlags
@@ -71,6 +72,7 @@ type DeleteOptions struct {
 	Visitor         chart.Visitor
 	HookExecutor    *chart.HookExecutor
 	Deleter         deletions.Deleter
+	ResourceFinder  *resources.Finder
 
 	Namespace        string
 	EnforceNamespace bool
@@ -107,6 +109,11 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 		}
 	}
 
+	o.DynamicClient, err = o.DynamicClientGetter.Get(f)
+	if err != nil {
+		return err
+	}
+
 	o.DiscoveryClient, err = f.ToDiscoveryClient()
 	if err != nil {
 		return err
@@ -115,6 +122,10 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	o.Mapper, err = f.ToRESTMapper()
 	if err != nil {
 		return err
+	}
+
+	if o.Prune {
+		o.ResourceFinder = resources.NewFinder(o.DiscoveryClient, o.DynamicClient, o.Mapper)
 	}
 
 	p := o.PrintFlags.ToPrinter(o.DryRun)
@@ -156,9 +167,7 @@ func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
 	var infos []*resource.Info
 
 	if o.Prune {
-		finder := resources.NewFinder(o.DiscoveryClient, o.DynamicClient, o.Mapper)
-
-		infos, err = finder.FindByLabelSelector(chart.LabelSelector(c))
+		infos, err = o.ResourceFinder.FindByLabelSelector(chart.LabelSelector(c))
 	} else {
 		var buf []byte
 
