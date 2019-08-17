@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/util/templates"
 )
 
 func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
@@ -19,18 +20,21 @@ func NewRenderCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	cmd := &cobra.Command{
 		Use:   "render",
 		Short: "Render resources from one or multiple helm charts",
-		Long:  "Renders resources of one or multiple helm charts. This can be used to preview the manifests that are sent to the cluster.",
-		Example: `  # Render a single chart
-  kubectl chart render -f ~/charts/mychart
+		Long: templates.LongDesc(`
+			Renders resources of one or multiple helm charts.
+			This can be used to preview the manifests that are sent to the cluster.`),
+		Example: templates.Examples(`
+			# Render a single chart
+			kubectl chart render -f ~/charts/mychart
 
-  # Render multiple charts
-  kubectl chart render -f ~/charts --recursive
+			# Render multiple charts
+			kubectl chart render -f ~/charts --recursive
 
-  # Render chart hooks
-  kubectl chart render -f ~/charts/mychart --hook-type pre-apply
+			# Render chart hooks
+			kubectl chart render -f ~/charts/mychart --hook-type pre-apply
 
-  # Render all chart hooks
-  kubectl chart render -f ~/charts --recursive --hook-type all`,
+			# Render all chart hooks
+			kubectl chart render -f ~/charts --recursive --hook-type all`),
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))

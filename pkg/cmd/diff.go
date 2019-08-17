@@ -18,6 +18,7 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util/openapi"
+	"k8s.io/kubectl/pkg/util/templates"
 )
 
 // DryRunVerifier verifies if a given group-version-kind supports DryRun
@@ -35,12 +36,14 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 	cmd := &cobra.Command{
 		Use:   "diff",
 		Short: "Diff resources from one or multiple helm charts",
-		Long:  "Diffs resources of one or multiple helm charts against the live objects in the cluster.",
-		Example: `  # Diff a single chart
-  kubectl chart diff -f ~/charts/mychart
+		Long: templates.LongDesc(
+			`Diffs resources of one or multiple helm charts against the live objects in the cluster.`),
+		Example: templates.Examples(`
+			# Diff a single chart
+			kubectl chart diff -f ~/charts/mychart
 
-  # Diff multiple charts with custom diff context and no coloring
-  kubectl chart diff -f ~/charts --recursive --diff-context 20 --no-color`,
+			# Diff multiple charts with custom diff context and no coloring
+			kubectl chart diff -f ~/charts --recursive --diff-context 20 --no-color`),
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))

@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/util/templates"
 )
 
 func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
@@ -25,18 +26,20 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 	cmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete resources from one or multiple helm charts",
-		Long:  "Deletes resources of one or multiple helm charts from a cluster.",
-		Example: `  # Delete resources of a single chart
-  kubectl chart delete -f ~/charts/mychart
+		Long: templates.LongDesc(`
+			Deletes resources of one or multiple helm charts from a cluster.`),
+		Example: templates.Examples(`
+			# Delete resources of a single chart
+			kubectl chart delete -f ~/charts/mychart
 
-  # Delete resources of multiple charts
-  kubectl chart delete -f ~/charts --recursive
+			# Delete resources of multiple charts
+			kubectl chart delete -f ~/charts --recursive
 
-  # Dry run resource deletion
-  kubectl chart delete -f ~/charts/mychart --dry-run
+			# Dry run resource deletion
+			kubectl chart delete -f ~/charts/mychart --dry-run
 
-  # Skip executing pre and post-delete hooks
-  kubectl chart delete -f ~/charts/mychart --no-hooks`,
+			# Skip executing pre and post-delete hooks
+			kubectl chart delete -f ~/charts/mychart --no-hooks`),
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))

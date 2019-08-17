@@ -12,6 +12,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/helm/pkg/chartutil"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/util/templates"
 )
 
 func NewDumpValuesCmd(streams genericclioptions.IOStreams) *cobra.Command {
@@ -20,15 +21,18 @@ func NewDumpValuesCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dump-values",
 		Short: "Dump merged values for a chart",
-		Long:  "This command dumps the merged values for the provided charts how they would be available in templates. This is useful for debugging.",
-		Example: `  # Dump values for a single chart
-  kubectl chart dump-values -f ~/charts/mychart
+		Long: templates.LongDesc(`
+			This command dumps the merged values for the provided charts how they would be available in templates.
+			This is useful for debugging.`),
+		Example: templates.Examples(`
+			# Dump values for a single chart
+			kubectl chart dump-values -f ~/charts/mychart
 
-  # Dump values for multiple charts with additional values merged
-  kubectl chart dump-values -f ~/charts --recursive --values ~/some/additional/values.yaml
+			# Dump values for multiple charts with additional values merged
+			kubectl chart dump-values -f ~/charts --recursive --values ~/some/additional/values.yaml
 
-  # Dump values for multiple charts with filter
-  kubectl chart dump-values -f ~/charts --recursive --chart-filter mychart`,
+			# Dump values for multiple charts with filter
+			kubectl chart dump-values -f ~/charts --recursive --chart-filter mychart`),
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete())

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/util/templates"
 	"sigs.k8s.io/yaml"
 )
 
@@ -28,11 +29,12 @@ func NewVersionCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Displays the version of kubectl-chart",
-		Example: `  # Short version
-  kubectl chart version --short
+		Example: templates.Examples(`
+			# Short version
+			kubectl chart version --short
 
-  # YAML Output format
-  kubectl chart version --output yaml`,
+			# YAML Output format
+			kubectl chart version --output yaml`),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
