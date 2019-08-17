@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubectl/pkg/cmd/delete"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/openapi"
+	"k8s.io/kubectl/pkg/util/templates"
 	"k8s.io/kubectl/pkg/validation"
 )
 
@@ -40,21 +41,23 @@ func NewApplyCmd(f genericclioptions.RESTClientGetter, streams genericclioptions
 	cmd := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply resources from one or multiple helm charts",
-		Long:  "Apply renders the resources of one or multiple helm charts and applies them to a cluster.",
-		Example: `  # Render and apply a single chart
-  kubectl chart apply -f ~/charts/mychart
+		Long: templates.LongDesc(`
+			Apply renders the resources of one or multiple helm charts and applies them to a cluster.`),
+		Example: templates.Examples(`
+			# Render and apply a single chart
+			kubectl chart apply -f ~/charts/mychart
 
-  # Render and apply multiple charts with additional values merged
-  kubectl chart apply -f ~/charts --recursive --values ~/some/additional/values.yaml
+			# Render and apply multiple charts with additional values merged
+			kubectl chart apply -f ~/charts --recursive --values ~/some/additional/values.yaml
 
-  # Dry run apply and print resource diffs
-  kubectl chart apply -f ~/charts/mychart --diff --server-dry-run
+			# Dry run apply and print resource diffs
+			kubectl chart apply -f ~/charts/mychart --diff --server-dry-run
 
-  # Render and apply multiple charts with a chart filter
-  kubectl chart apply -f ~/charts --recursive --chart-filter mychart
+			# Render and apply multiple charts with a chart filter
+			kubectl chart apply -f ~/charts --recursive --chart-filter mychart
 
-  # Skip executing pre and post-apply hooks
-  kubectl chart apply -f ~/charts/mychart --no-hooks`,
+			# Skip executing pre and post-apply hooks
+			kubectl chart apply -f ~/charts/mychart --no-hooks`),
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f))
