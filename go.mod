@@ -12,6 +12,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.7
+	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de
 	github.com/martinohmann/go-difflib v1.1.0
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/cobra v0.0.5
@@ -24,7 +25,9 @@ require (
 	k8s.io/client-go v0.0.0-20190808180953-396a06da3bd7
 	k8s.io/helm v2.14.1+incompatible
 	k8s.io/klog v0.3.3
+	k8s.io/kube-openapi v0.0.0-20190709113604-33be087ad058
 	k8s.io/kubectl v0.0.0-20190808183503-dbe0ccca3beb
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 	sigs.k8s.io/yaml v1.1.0
+	vbom.ml/util v0.0.0-20180919145318-efcd4e0f9787
 )
