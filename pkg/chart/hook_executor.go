@@ -95,7 +95,7 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 			return err
 		}
 
-		if h.NoWait() {
+		if h.NoWait {
 			return nil
 		}
 
@@ -121,13 +121,12 @@ func (e *HookExecutor) ExecHooks(c *Chart, hookType string) error {
 		}
 
 		options := wait.Options{
-			AllowFailure: h.AllowFailure(),
-			Timeout:      wait.DefaultWaitTimeout,
+			AllowFailure: h.AllowFailure,
+			Timeout:      h.WaitTimeout,
 		}
 
-		timeout, _ := h.WaitTimeout()
-		if timeout > 0 {
-			options.Timeout = timeout
+		if options.Timeout == 0 {
+			options.Timeout = wait.DefaultWaitTimeout
 		}
 
 		resourceOptions[uid] = options
@@ -146,7 +145,7 @@ func (e *HookExecutor) cleanupHooks(chartName, hookType string) error {
 		Resource(jobGVR).
 		Namespace(metav1.NamespaceAll).
 		List(metav1.ListOptions{
-			LabelSelector: hook.LabelSelector(chartName, hookType),
+			LabelSelector: HookLabelSelector(chartName, hookType),
 		})
 	if apierrors.IsNotFound(err) {
 		return nil
@@ -188,15 +187,15 @@ func (e *HookExecutor) waitForCompletion(infos []*resource.Info, options wait.Re
 func (e *HookExecutor) printHook(h *hook.Hook) error {
 	options := make([]string, 0)
 
-	if timeout, _ := h.WaitTimeout(); timeout > 0 {
-		options = append(options, fmt.Sprintf("timeout %s", timeout))
+	if h.WaitTimeout > 0 {
+		options = append(options, fmt.Sprintf("timeout %s", h.WaitTimeout))
 	}
 
-	if h.NoWait() {
+	if h.NoWait {
 		options = append(options, "no-wait")
 	}
 
-	if h.AllowFailure() {
+	if h.AllowFailure {
 		options = append(options, "allow-failure")
 	}
 

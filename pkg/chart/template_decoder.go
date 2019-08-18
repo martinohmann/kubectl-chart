@@ -5,6 +5,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/resources/statefulset"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -41,7 +42,7 @@ func (p *templateDecoder) decodeTemplate(raw []byte) ([]runtime.Object, []*hook.
 		meta.DefaultNamespace(obj, p.config.Namespace)
 
 		if meta.HasAnnotation(obj, meta.AnnotationHookType) {
-			h, err := p.prepareHook(obj)
+			h, err := p.parseHook(obj)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -60,14 +61,14 @@ func (p *templateDecoder) decodeTemplate(raw []byte) ([]runtime.Object, []*hook.
 	return resources, hooks, nil
 }
 
-func (p *templateDecoder) prepareHook(obj runtime.Object) (*hook.Hook, error) {
-	h, err := hook.New(obj)
+func (p *templateDecoder) parseHook(obj runtime.Object) (*hook.Hook, error) {
+	h, err := hook.Parse(obj)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "invalid hook %q", meta.GetObjectName(obj))
 	}
 
 	meta.AddLabel(obj, meta.LabelHookChartName, p.config.Name)
-	meta.AddLabel(obj, meta.LabelHookType, h.Type())
+	meta.AddLabel(obj, meta.LabelHookType, h.Type)
 
 	return h, nil
 }

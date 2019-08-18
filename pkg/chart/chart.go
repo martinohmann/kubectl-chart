@@ -8,7 +8,7 @@ import (
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/meta"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/proto/hapi/chart"
@@ -29,6 +29,12 @@ type Chart struct {
 // for more information.
 func LabelSelector(c *Chart) string {
 	return fmt.Sprintf("%s=%s", meta.LabelChartName, c.Config.Name)
+}
+
+// HookLabelSelector returns a selector which can be used to find hooks of given
+// type for given chart in a cluster.
+func HookLabelSelector(chartName, hookType string) string {
+	return fmt.Sprintf("%s=%s,%s=%s", meta.LabelHookChartName, chartName, meta.LabelHookType, hookType)
 }
 
 // Config is the configuration for rendering a chart.

@@ -32,3 +32,10 @@ func DefaultNamespace(obj runtime.Object, namespace string) error {
 
 	return nil
 }
+
+// GetObjectName returns the name from obj's metadata.
+func GetObjectName(obj runtime.Object) string {
+	accessor, _ := meta.Accessor(obj)
+
+	return accessor.GetName()
+}

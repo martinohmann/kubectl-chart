@@ -73,3 +73,9 @@ func TestDefaultNamespace(t *testing.T) {
 
 	assert.Equal(t, "foo", obj.GetNamespace())
 }
+
+func TestGetObjectHame(t *testing.T) {
+	obj := newUnstructured(schema.GroupVersionKind{}, nil)
+
+	assert.Equal(t, "foo", GetObjectName(obj))
+}

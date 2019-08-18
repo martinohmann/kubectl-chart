@@ -68,7 +68,7 @@ func NewRenderOptions(streams genericclioptions.IOStreams) *RenderOptions {
 }
 
 func (o *RenderOptions) Validate() error {
-	if o.HookType != "" && o.HookType != "all" && !hook.IsSupportedType(o.HookType) {
+	if o.HookType != "" && o.HookType != "all" && !hook.SupportedTypes.Has(o.HookType) {
 		return hook.NewUnsupportedTypeError(o.HookType)
 	}
 

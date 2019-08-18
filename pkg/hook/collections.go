@@ -26,12 +26,10 @@ func (m Map) Add(hooks ...*Hook) Map {
 }
 
 func (m Map) add(h *Hook) Map {
-	hookType := h.Type()
-
-	if m[hookType] == nil {
-		m[hookType] = List{h}
+	if m[h.Type] == nil {
+		m[h.Type] = List{h}
 	} else {
-		m[hookType] = append(m[hookType], h)
+		m[h.Type] = append(m[h.Type], h)
 	}
 
 	return m

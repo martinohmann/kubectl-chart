@@ -100,9 +100,9 @@ spec:
 
 func TestRenderCmd_Validate(t *testing.T) {
 	tests := []struct {
-		name        string
-		hookType    string
-		expectedErr string
+		name      string
+		hookType  string
+		expectErr bool
 	}{
 		{
 			name: "empty hook type",
@@ -112,9 +112,9 @@ func TestRenderCmd_Validate(t *testing.T) {
 			hookType: "all",
 		},
 		{
-			name:        "invalid hook type",
-			hookType:    "invalid-hook-type",
-			expectedErr: `unsupported hook type "invalid-hook-type", allowed values are: [pre-apply post-apply pre-delete post-delete]`,
+			name:      "invalid hook type",
+			hookType:  "invalid-hook-type",
+			expectErr: true,
 		},
 	}
 
@@ -126,9 +126,8 @@ func TestRenderCmd_Validate(t *testing.T) {
 
 			err := o.Validate()
 
-			if test.expectedErr != "" {
+			if test.expectErr {
 				require.Error(t, err)
-				assert.Equal(t, test.expectedErr, err.Error())
 			} else {
 				require.NoError(t, err)
 			}
@@ -226,11 +225,11 @@ spec:
 		},
 		{
 			name:     "render pre-apply hooks",
-			hookType: hook.PreApply,
+			hookType: hook.TypePreApply,
 		},
 		{
 			name:     "render post-apply hooks",
-			hookType: hook.PostApply,
+			hookType: hook.TypePostApply,
 			expected: `---
 apiVersion: batch/v1
 kind: Job

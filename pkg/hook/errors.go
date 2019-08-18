@@ -23,7 +23,7 @@ func (e UnsupportedTypeError) Error() string {
 	return fmt.Sprintf(
 		"unsupported hook type %q, allowed values are: %v",
 		e.Type,
-		SupportedTypes,
+		SupportedTypes.List(),
 	)
 }
 
