@@ -44,9 +44,10 @@ func main() {
 
 	rootCmd.AddCommand(cmd.NewApplyCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewDeleteCmd(configFlags, streams))
-	rootCmd.AddCommand(cmd.NewRenderCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewDiffCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewDumpValuesCmd(streams))
+	rootCmd.AddCommand(cmd.NewGetCmd(cmdutil.NewFactory(configFlags), streams))
+	rootCmd.AddCommand(cmd.NewRenderCmd(configFlags, streams))
 	rootCmd.AddCommand(cmd.NewVersionCmd(streams))
 
 	cmdutil.CheckErr(rootCmd.Execute())
