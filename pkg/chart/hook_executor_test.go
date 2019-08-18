@@ -50,35 +50,33 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
 			},
-			hookType: hook.PreApply,
+			hookType: hook.TypePreApply,
 			hooks: hook.Map{
-				hook.PreApply: hook.List{
-					&hook.Hook{
-						Unstructured: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "batch/v1",
-								"kind":       "Job",
-								"metadata": map[string]interface{}{
-									"name":      "somehook",
-									"namespace": "bar",
-									"annotations": map[string]interface{}{
-										meta.AnnotationHookType: hook.PreApply,
-									},
-									"labels": map[string]interface{}{
-										meta.LabelHookChartName: "foochart",
-										meta.LabelHookType:      hook.PreApply,
-									},
+				hook.TypePreApply: hook.List{
+					hook.MustParse(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									meta.AnnotationHookType: hook.TypePreApply,
 								},
-								"spec": map[string]interface{}{
-									"template": map[string]interface{}{
-										"spec": map[string]interface{}{
-											"restartPolicy": "Never",
-										},
+								"labels": map[string]interface{}{
+									meta.LabelHookChartName: "foochart",
+									meta.LabelHookType:      hook.TypePreApply,
+								},
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
 									},
 								},
 							},
 						},
-					},
+					}),
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
@@ -124,36 +122,34 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
 			},
-			hookType: hook.PreApply,
+			hookType: hook.TypePreApply,
 			hooks: hook.Map{
-				hook.PreApply: hook.List{
-					&hook.Hook{
-						Unstructured: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "batch/v1",
-								"kind":       "Job",
-								"metadata": map[string]interface{}{
-									"name":      "somehook",
-									"namespace": "bar",
-									"annotations": map[string]interface{}{
-										meta.AnnotationHookType:   hook.PreApply,
-										meta.AnnotationHookNoWait: "true",
-									},
-									"labels": map[string]interface{}{
-										meta.LabelHookChartName: "foochart",
-										meta.LabelHookType:      hook.PreApply,
-									},
+				hook.TypePreApply: hook.List{
+					hook.MustParse(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									meta.AnnotationHookType:   hook.TypePreApply,
+									meta.AnnotationHookNoWait: "true",
 								},
-								"spec": map[string]interface{}{
-									"template": map[string]interface{}{
-										"spec": map[string]interface{}{
-											"restartPolicy": "Never",
-										},
+								"labels": map[string]interface{}{
+									meta.LabelHookChartName: "foochart",
+									meta.LabelHookType:      hook.TypePreApply,
+								},
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
 									},
 								},
 							},
 						},
-					},
+					}),
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
@@ -191,38 +187,36 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
 			},
-			hookType: hook.PreApply,
+			hookType: hook.TypePreApply,
 			hooks: hook.Map{
-				hook.PreApply: hook.List{
-					&hook.Hook{
-						Unstructured: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "batch/v1",
-								"kind":       "Job",
-								"metadata": map[string]interface{}{
-									"name":      "somehook",
-									"namespace": "bar",
-									"annotations": map[string]interface{}{
-										meta.AnnotationHookType:         hook.PreApply,
-										meta.AnnotationHookAllowFailure: "true",
-										meta.AnnotationHookWaitTimeout:  "1h",
-									},
-									"labels": map[string]interface{}{
-										meta.LabelHookChartName: "foochart",
-										meta.LabelHookType:      hook.PreApply,
-									},
-									"uid": "some-uid",
+				hook.TypePreApply: hook.List{
+					hook.MustParse(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									meta.AnnotationHookType:         hook.TypePreApply,
+									meta.AnnotationHookAllowFailure: "true",
+									meta.AnnotationHookWaitTimeout:  "1h",
 								},
-								"spec": map[string]interface{}{
-									"template": map[string]interface{}{
-										"spec": map[string]interface{}{
-											"restartPolicy": "Never",
-										},
+								"labels": map[string]interface{}{
+									meta.LabelHookChartName: "foochart",
+									meta.LabelHookType:      hook.TypePreApply,
+								},
+								"uid": "some-uid",
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
 									},
 								},
 							},
 						},
-					},
+					}),
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
@@ -271,38 +265,36 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
 			},
-			hookType: hook.PreApply,
+			hookType: hook.TypePostApply,
 			hooks: hook.Map{
-				hook.PreApply: hook.List{
-					&hook.Hook{
-						Unstructured: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "batch/v1",
-								"kind":       "Job",
-								"metadata": map[string]interface{}{
-									"name":      "somehook",
-									"namespace": "bar",
-									"annotations": map[string]interface{}{
-										meta.AnnotationHookType:         hook.PostApply,
-										meta.AnnotationHookAllowFailure: "true",
-										meta.AnnotationHookWaitTimeout:  "0s",
-									},
-									"labels": map[string]interface{}{
-										meta.LabelHookChartName: "foochart",
-										meta.LabelHookType:      hook.PreApply,
-									},
-									"uid": "some-uid",
+				hook.TypePostApply: hook.List{
+					hook.MustParse(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									meta.AnnotationHookType:         hook.TypePostApply,
+									meta.AnnotationHookAllowFailure: "true",
+									meta.AnnotationHookWaitTimeout:  "0s",
 								},
-								"spec": map[string]interface{}{
-									"template": map[string]interface{}{
-										"spec": map[string]interface{}{
-											"restartPolicy": "Never",
-										},
+								"labels": map[string]interface{}{
+									meta.LabelHookChartName: "foochart",
+									meta.LabelHookType:      hook.TypePostApply,
+								},
+								"uid": "some-uid",
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
 									},
 								},
 							},
 						},
-					},
+					}),
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
@@ -336,35 +328,33 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
 			},
 			dryRun:   true,
-			hookType: hook.PreApply,
+			hookType: hook.TypePostApply,
 			hooks: hook.Map{
-				hook.PreApply: hook.List{
-					&hook.Hook{
-						Unstructured: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "batch/v1",
-								"kind":       "Job",
-								"metadata": map[string]interface{}{
-									"name":      "somehook",
-									"namespace": "bar",
-									"annotations": map[string]interface{}{
-										meta.AnnotationHookType: hook.PostApply,
-									},
-									"labels": map[string]interface{}{
-										meta.LabelHookChartName: "foochart",
-										meta.LabelHookType:      hook.PostApply,
-									},
+				hook.TypePostApply: hook.List{
+					hook.MustParse(&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "batch/v1",
+							"kind":       "Job",
+							"metadata": map[string]interface{}{
+								"name":      "somehook",
+								"namespace": "bar",
+								"annotations": map[string]interface{}{
+									meta.AnnotationHookType: hook.TypePostApply,
 								},
-								"spec": map[string]interface{}{
-									"template": map[string]interface{}{
-										"spec": map[string]interface{}{
-											"restartPolicy": "Never",
-										},
+								"labels": map[string]interface{}{
+									meta.LabelHookChartName: "foochart",
+									meta.LabelHookType:      hook.TypePostApply,
+								},
+							},
+							"spec": map[string]interface{}{
+								"template": map[string]interface{}{
+									"spec": map[string]interface{}{
+										"restartPolicy": "Never",
 									},
 								},
 							},
 						},
-					},
+					}),
 				},
 			},
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
@@ -452,7 +442,7 @@ func TestHookExecutor_ExecHooks(t *testing.T) {
 func TestHookExecutor_ExecHooks_Nil(t *testing.T) {
 	var executor *HookExecutor
 
-	assert.NoError(t, executor.ExecHooks(&Chart{}, hook.PreApply))
+	assert.NoError(t, executor.ExecHooks(&Chart{}, hook.TypePreApply))
 }
 
 func newTestChart(hooks hook.Map) *Chart {

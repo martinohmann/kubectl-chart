@@ -260,7 +260,7 @@ func (o *ApplyOptions) Run() error {
 
 		defer os.Remove(f.Name())
 
-		err = o.HookExecutor.ExecHooks(c, hook.PreApply)
+		err = o.HookExecutor.ExecHooks(c, hook.TypePreApply)
 		if err != nil {
 			return err
 		}
@@ -272,7 +272,7 @@ func (o *ApplyOptions) Run() error {
 			return err
 		}
 
-		return o.HookExecutor.ExecHooks(c, hook.PostApply)
+		return o.HookExecutor.ExecHooks(c, hook.TypePostApply)
 	})
 	if err != nil {
 		return err

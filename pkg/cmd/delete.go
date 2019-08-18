@@ -204,7 +204,7 @@ func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
 
 	resources.SortInfosByKind(infos, resources.DeleteOrder)
 
-	err = o.HookExecutor.ExecHooks(c, hook.PreDelete)
+	err = o.HookExecutor.ExecHooks(c, hook.TypePreDelete)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
 		return err
 	}
 
-	err = o.HookExecutor.ExecHooks(c, hook.PostDelete)
+	err = o.HookExecutor.ExecHooks(c, hook.TypePostDelete)
 	if err != nil {
 		return err
 	}

@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestNew(t *testing.T) {
+func TestParse(t *testing.T) {
 	tests := []struct {
 		name         string
 		obj          runtime.Object
@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:   PostApply,
+							meta.AnnotationHookType:   TypePostApply,
 							meta.AnnotationHookNoWait: "true",
 						},
 					},
@@ -46,12 +46,9 @@ func TestNew(t *testing.T) {
 				},
 			},
 			validateHook: func(t *testing.T, h *Hook) {
-				timeout, err := h.WaitTimeout()
-
-				assert.NoError(t, err)
-				assert.Equal(t, time.Duration(0), timeout)
-				assert.True(t, h.NoWait())
-				assert.Equal(t, PostApply, h.Type())
+				assert.Equal(t, time.Duration(0), h.WaitTimeout)
+				assert.True(t, h.NoWait)
+				assert.Equal(t, TypePostApply, h.Type)
 			},
 		},
 		{
@@ -64,7 +61,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:         PostApply,
+							meta.AnnotationHookType:         TypePostApply,
 							meta.AnnotationHookAllowFailure: "true",
 							meta.AnnotationHookWaitTimeout:  "1h",
 						},
@@ -79,12 +76,9 @@ func TestNew(t *testing.T) {
 				},
 			},
 			validateHook: func(t *testing.T, h *Hook) {
-				timeout, err := h.WaitTimeout()
-
-				assert.NoError(t, err)
-				assert.Equal(t, time.Hour, timeout)
-				assert.True(t, h.AllowFailure())
-				assert.Equal(t, PostApply, h.Type())
+				assert.Equal(t, time.Hour, h.WaitTimeout)
+				assert.True(t, h.AllowFailure)
+				assert.Equal(t, TypePostApply, h.Type)
 			},
 		},
 		{
@@ -97,7 +91,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:         PostApply,
+							meta.AnnotationHookType:         TypePostApply,
 							meta.AnnotationHookAllowFailure: "true",
 							meta.AnnotationHookWaitTimeout:  "1h",
 						},
@@ -107,7 +101,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": unsupported hook resource kind "ConfigMap", only "Job" is allowed`,
+			expectedErr: `unsupported hook resource kind "ConfigMap", only "Job" is allowed`,
 		},
 		{
 			name: "unsupported hook type",
@@ -133,7 +127,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": unsupported hook type "foo", allowed values are: [pre-apply post-apply pre-delete post-delete]`,
+			expectedErr: `unsupported hook type "foo", allowed values are: [post-apply post-delete pre-apply pre-delete]`,
 		},
 		{
 			name: "conflicting annotations",
@@ -145,7 +139,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:         PreApply,
+							meta.AnnotationHookType:         TypePreApply,
 							meta.AnnotationHookAllowFailure: "true",
 							meta.AnnotationHookNoWait:       "true",
 						},
@@ -159,7 +153,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-allow-failure]`,
+			expectedErr: `annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-allow-failure]`,
 		},
 		{
 			name: "invalid wait timeout",
@@ -171,7 +165,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:         PreApply,
+							meta.AnnotationHookType:         TypePreApply,
 							meta.AnnotationHookAllowFailure: "true",
 							meta.AnnotationHookWaitTimeout:  "foo",
 						},
@@ -185,7 +179,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": malformed annotation "kubectl-chart/hook-wait-timeout": time: invalid duration foo`,
+			expectedErr: `malformed annotation "kubectl-chart/hook-wait-timeout": time: invalid duration foo`,
 		},
 		{
 			name: "conflicting wait annotations",
@@ -197,7 +191,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:        PreApply,
+							meta.AnnotationHookType:        TypePreApply,
 							meta.AnnotationHookWaitTimeout: "5m",
 							meta.AnnotationHookNoWait:      "true",
 						},
@@ -211,7 +205,7 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-wait-timeout]`,
+			expectedErr: `annotations cannot be set at the same time: [kubectl-chart/hook-no-wait kubectl-chart/hook-wait-timeout]`,
 		},
 		{
 			name: "unsupported restartPolicy field value",
@@ -223,7 +217,7 @@ func TestNew(t *testing.T) {
 						"name":      "somehook",
 						"namespace": "bar",
 						"annotations": map[string]interface{}{
-							meta.AnnotationHookType:   PreApply,
+							meta.AnnotationHookType:   TypePreApply,
 							meta.AnnotationHookNoWait: "true",
 						},
 					},
@@ -236,13 +230,13 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: `invalid hook "somehook": unsupported restartPolicy "Always" in the pod template, only "Never" is allowed`,
+			expectedErr: `unsupported restartPolicy "Always" in the pod template, only "Never" is allowed`,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			h, err := New(test.obj)
+			h, err := Parse(test.obj)
 			if test.expectedErr != "" {
 				require.Error(t, err)
 				assert.Equal(t, test.expectedErr, err.Error())

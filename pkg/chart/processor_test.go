@@ -101,42 +101,40 @@ func TestProcessor_Process(t *testing.T) {
 	}
 
 	expectedHooks := hook.Map{
-		hook.PostApply: hook.List{
-			&hook.Hook{
-				Unstructured: &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"apiVersion": "batch/v1",
-						"kind":       "Job",
-						"metadata": map[string]interface{}{
-							"name":      "foobar-chart1",
-							"namespace": "bar",
-							"annotations": map[string]interface{}{
-								meta.AnnotationHookType: hook.PostApply,
-							},
-							"labels": map[string]interface{}{
-								"app.kubernetes.io/name":       "chart1",
-								"helm.sh/chart":                "chart1-0.1.0",
-								"app.kubernetes.io/instance":   "foobar",
-								"app.kubernetes.io/managed-by": "Tiller",
-								meta.LabelHookChartName:        "foobar",
-								meta.LabelHookType:             hook.PostApply,
-							},
+		hook.TypePostApply: hook.List{
+			hook.MustParse(&unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "batch/v1",
+					"kind":       "Job",
+					"metadata": map[string]interface{}{
+						"name":      "foobar-chart1",
+						"namespace": "bar",
+						"annotations": map[string]interface{}{
+							meta.AnnotationHookType: hook.TypePostApply,
 						},
-						"spec": map[string]interface{}{
-							"template": map[string]interface{}{
-								"spec": map[string]interface{}{
-									"restartPolicy": "Never",
-									"containers": []interface{}{
-										map[string]interface{}{
-											"name":            "chart1",
-											"image":           "nginx:stable",
-											"imagePullPolicy": "IfNotPresent",
-											"ports": []interface{}{
-												map[string]interface{}{
-													"containerPort": int64(80),
-													"protocol":      "TCP",
-													"name":          "http",
-												},
+						"labels": map[string]interface{}{
+							"app.kubernetes.io/name":       "chart1",
+							"helm.sh/chart":                "chart1-0.1.0",
+							"app.kubernetes.io/instance":   "foobar",
+							"app.kubernetes.io/managed-by": "Tiller",
+							meta.LabelHookChartName:        "foobar",
+							meta.LabelHookType:             hook.TypePostApply,
+						},
+					},
+					"spec": map[string]interface{}{
+						"template": map[string]interface{}{
+							"spec": map[string]interface{}{
+								"restartPolicy": "Never",
+								"containers": []interface{}{
+									map[string]interface{}{
+										"name":            "chart1",
+										"image":           "nginx:stable",
+										"imagePullPolicy": "IfNotPresent",
+										"ports": []interface{}{
+											map[string]interface{}{
+												"containerPort": int64(80),
+												"protocol":      "TCP",
+												"name":          "http",
 											},
 										},
 									},
@@ -145,7 +143,7 @@ func TestProcessor_Process(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		},
 	}
 
@@ -168,5 +166,5 @@ func TestProcessor_ProcessUnsupportedHook(t *testing.T) {
 	_, err := p.Process(config)
 
 	require.Error(t, err)
-	assert.Equal(t, `while parsing template "chart1/templates/hook.yaml": invalid hook "foobar-chart1": unsupported hook type "foo", allowed values are: [pre-apply post-apply pre-delete post-delete]`, err.Error())
+	assert.Equal(t, `while parsing template "chart1/templates/hook.yaml": invalid hook "foobar-chart1": unsupported hook type "foo", allowed values are: [post-apply post-delete pre-apply pre-delete]`, err.Error())
 }

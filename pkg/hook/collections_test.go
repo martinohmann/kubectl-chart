@@ -11,7 +11,7 @@ import (
 )
 
 func newTestHook(name, hookType string) *Hook {
-	return &Hook{newUnstructured(name, hookType)}
+	return MustParse(newUnstructured(name, hookType))
 }
 
 func newUnstructured(name, hookType string) *unstructured.Unstructured {
@@ -40,30 +40,30 @@ func newUnstructured(name, hookType string) *unstructured.Unstructured {
 func TestMap(t *testing.T) {
 	m := Map{}
 
-	m.Add(newTestHook("foo", PreApply))
-	m.Add(newTestHook("bar", PostApply))
-	m.Add(newTestHook("baz", PostApply))
+	m.Add(newTestHook("foo", TypePreApply))
+	m.Add(newTestHook("bar", TypePostApply))
+	m.Add(newTestHook("baz", TypePostApply))
 
 	assert.Len(t, m, 2)
-	assert.Len(t, m[PreDelete], 0)
-	assert.Len(t, m[PreApply], 1)
-	assert.Len(t, m[PostApply], 2)
+	assert.Len(t, m[TypePreDelete], 0)
+	assert.Len(t, m[TypePreApply], 1)
+	assert.Len(t, m[TypePostApply], 2)
 
 	assert.Equal(
 		t,
 		List{
-			newTestHook("bar", PostApply),
-			newTestHook("baz", PostApply),
+			newTestHook("bar", TypePostApply),
+			newTestHook("baz", TypePostApply),
 		},
-		m[PostApply],
+		m[TypePostApply],
 	)
 
 	assert.ElementsMatch(
 		t,
 		[]runtime.Object{
-			newUnstructured("foo", PreApply),
-			newUnstructured("bar", PostApply),
-			newUnstructured("baz", PostApply),
+			newUnstructured("foo", TypePreApply),
+			newUnstructured("bar", TypePostApply),
+			newUnstructured("baz", TypePostApply),
 		},
 		m.All().ToObjectList(),
 	)
@@ -71,8 +71,8 @@ func TestMap(t *testing.T) {
 
 func TestList_EachItem(t *testing.T) {
 	l := List{
-		newTestHook("bar", PostApply),
-		newTestHook("baz", PostApply),
+		newTestHook("bar", TypePostApply),
+		newTestHook("baz", TypePostApply),
 	}
 
 	names := []string{}
