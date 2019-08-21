@@ -102,10 +102,6 @@ func TestDiffCmd(t *testing.T) {
 
 	o.DryRunVerifier = &permissiveDryRunVerifier{}
 
-	o.BuilderFactory = func() *resource.Builder {
-		return f.NewBuilder()
-	}
-
 	require.NoError(t, o.Run())
 
 	expected := `--- apps.v1.StatefulSet.test.chart1

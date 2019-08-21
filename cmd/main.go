@@ -42,10 +42,12 @@ func main() {
 
 	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
-	rootCmd.AddCommand(cmd.NewApplyCmd(configFlags, streams))
-	rootCmd.AddCommand(cmd.NewDeleteCmd(configFlags, streams))
-	rootCmd.AddCommand(cmd.NewRenderCmd(configFlags, streams))
-	rootCmd.AddCommand(cmd.NewDiffCmd(configFlags, streams))
+	f := cmdutil.NewFactory(configFlags)
+
+	rootCmd.AddCommand(cmd.NewApplyCmd(f, streams))
+	rootCmd.AddCommand(cmd.NewDeleteCmd(f, streams))
+	rootCmd.AddCommand(cmd.NewRenderCmd(f, streams))
+	rootCmd.AddCommand(cmd.NewDiffCmd(f, streams))
 	rootCmd.AddCommand(cmd.NewDumpValuesCmd(streams))
 	rootCmd.AddCommand(cmd.NewVersionCmd(streams))
 

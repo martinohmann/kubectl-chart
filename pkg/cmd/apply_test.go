@@ -9,12 +9,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
-	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/rest/fake"
 	clienttesting "k8s.io/client-go/testing"
 	cmdtesting "k8s.io/kubectl/pkg/cmd/testing"
@@ -113,14 +111,8 @@ func TestApplyCmd(t *testing.T) {
 
 	o.DryRun = true
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
-	o.DynamicClientGetter.Client = dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
 
 	require.NoError(t, o.Complete(f))
-
-	o.BuilderFactory = func() *resource.Builder {
-		return f.NewBuilder()
-	}
-
 	require.NoError(t, o.Run())
 
 	expected := `service/chart1 configured (dry run)

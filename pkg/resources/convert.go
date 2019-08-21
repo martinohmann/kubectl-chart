@@ -1,8 +1,8 @@
 package resources
 
 import (
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/resource"
 )
@@ -18,12 +18,18 @@ func ToObjectList(infos []*resource.Info) []runtime.Object {
 	return objs
 }
 
-// ToInfoList converts an unstructured.UnstructuredList to a resource info
-// list. The mapper is used to obtain the REST mapping for each object.
-func ToInfoList(objs *unstructured.UnstructuredList, mapper meta.RESTMapper) ([]*resource.Info, error) {
+// ToInfoList converts obj to a resource info list. The obj must be a list type
+// runtime.Object or a slice of runtime.Object. The mapper is used to obtain
+// the REST mapping for each object.
+func ToInfoList(obj interface{}, mapper meta.RESTMapper) ([]*resource.Info, error) {
+	objs, err := interfaceToObjectList(obj)
+	if err != nil {
+		return nil, err
+	}
+
 	infos := []*resource.Info{}
 
-	for _, obj := range objs.Items {
+	for _, obj := range objs {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
@@ -31,7 +37,7 @@ func ToInfoList(objs *unstructured.UnstructuredList, mapper meta.RESTMapper) ([]
 			return nil, err
 		}
 
-		metadata, err := meta.Accessor(&obj)
+		metadata, err := meta.Accessor(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +46,7 @@ func ToInfoList(objs *unstructured.UnstructuredList, mapper meta.RESTMapper) ([]
 			Mapping:         mapping,
 			Namespace:       metadata.GetNamespace(),
 			Name:            metadata.GetName(),
-			Object:          &obj,
+			Object:          obj,
 			ResourceVersion: metadata.GetResourceVersion(),
 		}
 
@@ -48,4 +54,15 @@ func ToInfoList(objs *unstructured.UnstructuredList, mapper meta.RESTMapper) ([]
 	}
 
 	return infos, nil
+}
+
+func interfaceToObjectList(obj interface{}) ([]runtime.Object, error) {
+	switch obj := obj.(type) {
+	case []runtime.Object:
+		return obj, nil
+	case runtime.Object:
+		return meta.ExtractList(obj)
+	default:
+		return nil, errors.Errorf("got %T, expected list type runtime.Object or []runtime.Object", obj)
+	}
 }

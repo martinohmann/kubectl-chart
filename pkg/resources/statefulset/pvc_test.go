@@ -48,6 +48,22 @@ func TestPersistentVolumeClaimPruner_PruneClaims(t *testing.T) {
 		validateDeleter func(t *testing.T, deleter *deletions.FakeDeleter)
 	}{
 		{
+			name: "empty object slice",
+			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
+				return dynamicfakeclient.NewSimpleDynamicClient(scheme.Scheme)
+			},
+			validateActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 0 {
+					t.Fatal(spew.Sdump(actions))
+				}
+			},
+			validateDeleter: func(t *testing.T, deleter *deletions.FakeDeleter) {
+				if deleter.Called != 0 {
+					t.Fatal(spew.Sdump(deleter))
+				}
+			},
+		},
+		{
 			name: "no StatefulSet",
 			objs: []runtime.Object{
 				&unstructured.Unstructured{
