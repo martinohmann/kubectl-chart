@@ -35,6 +35,10 @@ func NewPersistentVolumeClaimPruner(client dynamic.Interface, deleter deletions.
 // required that the object slice only contains objects of type
 // *unstructured.Unstructured.
 func (p *PersistentVolumeClaimPruner) PruneClaims(objs []runtime.Object) error {
+	if len(objs) == 0 {
+		return nil
+	}
+
 	mapping, err := p.Mapper.RESTMapping(persistentVolumeClaimGK)
 	if err != nil {
 		return err

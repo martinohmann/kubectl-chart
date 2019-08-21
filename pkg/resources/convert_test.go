@@ -45,24 +45,15 @@ func TestToObjectList(t *testing.T) {
 }
 
 func TestToInfoList(t *testing.T) {
-	given := &unstructured.UnstructuredList{
-		Items: []unstructured.Unstructured{
-			{
-				Object: map[string]interface{}{
-					"apiVersion": "apps/v1",
-					"kind":       "StatefulSet",
-					"metadata": map[string]interface{}{
-						"name":      "foo",
-						"namespace": "bar",
-					},
-				},
-			},
-		},
-	}
-
-	expected := []*resource.Info{
+	tests := []struct {
+		name        string
+		obj         interface{}
+		expected    []*resource.Info
+		expectedErr string
+	}{
 		{
-			Object: &unstructured.Unstructured{
+			name: "non-list-type object",
+			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "apps/v1",
 					"kind":       "StatefulSet",
@@ -72,33 +63,124 @@ func TestToInfoList(t *testing.T) {
 					},
 				},
 			},
-			Name:      "foo",
-			Namespace: "bar",
-			Mapping: &meta.RESTMapping{
-				Resource: schema.GroupVersionResource{
-					Group:    "apps",
-					Version:  "v1",
-					Resource: "statefulsets",
+			expectedErr: "*unstructured.Unstructured is not a list: no Items field in this object",
+		},
+		{
+			name:        "non-object",
+			obj:         "foo",
+			expectedErr: "got string, expected list type runtime.Object or []runtime.Object",
+		},
+		{
+			name: "unstructured list",
+			obj: &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{
+					{
+						Object: map[string]interface{}{
+							"apiVersion": "apps/v1",
+							"kind":       "StatefulSet",
+							"metadata": map[string]interface{}{
+								"name":      "foo",
+								"namespace": "bar",
+							},
+						},
+					},
 				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Group:   "apps",
-					Version: "v1",
-					Kind:    "StatefulSet",
+			},
+			expected: []*resource.Info{
+				{
+					Object: &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "apps/v1",
+							"kind":       "StatefulSet",
+							"metadata": map[string]interface{}{
+								"name":      "foo",
+								"namespace": "bar",
+							},
+						},
+					},
+					Name:      "foo",
+					Namespace: "bar",
+					Mapping: &meta.RESTMapping{
+						Resource: schema.GroupVersionResource{
+							Group:    "apps",
+							Version:  "v1",
+							Resource: "statefulsets",
+						},
+						GroupVersionKind: schema.GroupVersionKind{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "StatefulSet",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "slice of objects",
+			obj: []runtime.Object{
+				&unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "StatefulSet",
+						"metadata": map[string]interface{}{
+							"name":      "foo",
+							"namespace": "bar",
+						},
+					},
+				},
+			},
+			expected: []*resource.Info{
+				{
+					Object: &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "apps/v1",
+							"kind":       "StatefulSet",
+							"metadata": map[string]interface{}{
+								"name":      "foo",
+								"namespace": "bar",
+							},
+						},
+					},
+					Name:      "foo",
+					Namespace: "bar",
+					Mapping: &meta.RESTMapping{
+						Resource: schema.GroupVersionResource{
+							Group:    "apps",
+							Version:  "v1",
+							Resource: "statefulsets",
+						},
+						GroupVersionKind: schema.GroupVersionKind{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "StatefulSet",
+						},
+					},
 				},
 			},
 		},
 	}
 
-	mapper := testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mapper := testrestmapper.TestOnlyStaticRESTMapper(scheme.Scheme)
 
-	infos, err := ToInfoList(given, mapper)
+			infos, err := ToInfoList(test.obj, mapper)
+			if test.expectedErr != "" {
+				require.Error(t, err)
+				assert.Equal(t, test.expectedErr, err.Error())
+			} else {
+				require.NoError(t, err)
 
-	require.NoError(t, err)
-	require.Len(t, infos, len(expected))
-	assert.Equal(t, infos[0].Object, expected[0].Object)
-	assert.Equal(t, infos[0].Name, expected[0].Name)
-	assert.Equal(t, infos[0].Namespace, expected[0].Namespace)
-	assert.Equal(t, infos[0].Mapping.Resource, expected[0].Mapping.Resource)
-	assert.Equal(t, infos[0].Mapping.GroupVersionKind, expected[0].Mapping.GroupVersionKind)
+				require.Len(t, infos, len(test.expected))
 
+				for i, expected := range test.expected {
+					assert.Equal(t, infos[i].Object, expected.Object)
+					assert.Equal(t, infos[i].Name, expected.Name)
+					assert.Equal(t, infos[i].Namespace, expected.Namespace)
+					assert.Equal(t, infos[i].Mapping.Resource, expected.Mapping.Resource)
+					assert.Equal(t, infos[i].Mapping.GroupVersionKind, expected.Mapping.GroupVersionKind)
+				}
+			}
+		})
+	}
 }

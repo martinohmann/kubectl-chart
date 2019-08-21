@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	fakediscovery "k8s.io/client-go/discovery/fake"
-	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
 	clienttesting "k8s.io/client-go/testing"
 	cmdtesting "k8s.io/kubectl/pkg/cmd/testing"
 )
@@ -53,17 +52,14 @@ func TestDeleteCmd(t *testing.T) {
 	f.ClientConfigVal = cmdtesting.DefaultClientConfig()
 	defer f.Cleanup()
 
-	fakeClient := dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
-
 	o := NewDeleteOptions(genericclioptions.NewTestIOStreamsDiscard())
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
-	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
 	require.NoError(t, o.Run())
 
-	actions := fakeClient.Actions()
+	actions := f.FakeDynamicClient.Actions()
 
 	if len(actions) != 2 {
 		t.Fatal(spew.Sdump(actions))
@@ -83,28 +79,25 @@ func TestDeleteCmd_DryRun(t *testing.T) {
 
 	f := cmdtesting.NewTestFactory().WithNamespace("test")
 	f.ClientConfigVal = cmdtesting.DefaultClientConfig()
+	f.FakeDynamicClient.PrependReactor("get", "services", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+		return true, newUnstructuredWithLabels("v1", "Service", "test", "chart1", map[string]interface{}{"kubectl-chart/chart-name": "chart1"}), nil
+	})
+	f.FakeDynamicClient.PrependReactor("get", "statefulsets", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+		return true, newUnstructuredWithLabels("apps/v1", "StatefulSet", "test", "chart1", map[string]interface{}{"kubectl-chart/chart-name": "chart1"}), nil
+	})
 	defer f.Cleanup()
 
 	streams, _, buf, _ := genericclioptions.NewTestIOStreams()
-
-	fakeClient := dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
-	fakeClient.PrependReactor("get", "services", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, newUnstructuredWithLabels("v1", "Service", "test", "chart1", map[string]interface{}{"kubectl-chart/chart-name": "chart1"}), nil
-	})
-	fakeClient.PrependReactor("get", "statefulsets", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, newUnstructuredWithLabels("apps/v1", "StatefulSet", "test", "chart1", map[string]interface{}{"kubectl-chart/chart-name": "chart1"}), nil
-	})
 
 	o := NewDeleteOptions(streams)
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
 	o.DryRun = true
-	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
 	require.NoError(t, o.Run())
 
-	actions := fakeClient.Actions()
+	actions := f.FakeDynamicClient.Actions()
 
 	if len(actions) != 2 {
 		t.Fatal(spew.Sdump(actions))
@@ -128,11 +121,6 @@ statefulset.apps/chart1 deleted (dry run)
 func TestDeleteCmd_Prune(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
-	fakeClient := dynamicfakeclient.NewSimpleDynamicClient(runtime.NewScheme())
-	fakeClient.PrependReactor("list", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, newUnstructuredList(newUnstructuredWithLabels("", "Pod", "ns-foo", "name-foo", map[string]interface{}{"kubectl-chart/chart-name": "chart1"})), nil
-	})
-
 	fakeDiscovery := &fakediscovery.FakeDiscovery{Fake: &clienttesting.Fake{}}
 	fakeDiscovery.Resources = []*metav1.APIResourceList{
 		{
@@ -151,18 +139,20 @@ func TestDeleteCmd_Prune(t *testing.T) {
 
 	f := newTestFactoryWithFakeDiscovery(fakeDiscovery)
 	f.ClientConfigVal = cmdtesting.DefaultClientConfig()
+	f.FakeDynamicClient.PrependReactor("list", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+		return true, newUnstructuredList(newUnstructuredWithLabels("", "Pod", "ns-foo", "name-foo", map[string]interface{}{"kubectl-chart/chart-name": "chart1"})), nil
+	})
 	defer f.Cleanup()
 
 	o := NewDeleteOptions(genericclioptions.NewTestIOStreamsDiscard())
 
 	o.ChartFlags.ChartDir = "../chart/testdata/valid-charts/chart1"
 	o.Prune = true
-	o.DynamicClientGetter.Client = fakeClient
 
 	require.NoError(t, o.Complete(f))
 	require.NoError(t, o.Run())
 
-	actions := fakeClient.Actions()
+	actions := f.FakeDynamicClient.Actions()
 
 	if len(actions) != 3 {
 		t.Fatal(spew.Sdump(actions))

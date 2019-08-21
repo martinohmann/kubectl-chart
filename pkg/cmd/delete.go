@@ -1,26 +1,21 @@
 package cmd
 
 import (
-	"bytes"
-
 	"github.com/martinohmann/kubectl-chart/pkg/chart"
 	"github.com/martinohmann/kubectl-chart/pkg/deletions"
 	"github.com/martinohmann/kubectl-chart/pkg/hook"
 	"github.com/martinohmann/kubectl-chart/pkg/resources"
 	"github.com/martinohmann/kubectl-chart/pkg/resources/statefulset"
-	"github.com/martinohmann/kubectl-chart/pkg/yaml"
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
+func NewDeleteCmd(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewDeleteOptions(streams)
 
 	cmd := &cobra.Command{
@@ -59,7 +54,6 @@ func NewDeleteCmd(f genericclioptions.RESTClientGetter, streams genericclioption
 
 type DeleteOptions struct {
 	genericclioptions.IOStreams
-	DynamicClientGetter
 
 	ChartFlags ChartFlags
 	HookFlags  HookFlags
@@ -67,57 +61,32 @@ type DeleteOptions struct {
 	DryRun     bool
 	Prune      bool
 
-	DynamicClient   dynamic.Interface
-	DiscoveryClient discovery.DiscoveryInterface
-	BuilderFactory  func() *resource.Builder
-	Mapper          meta.RESTMapper
-	Encoder         resources.Encoder
-	Visitor         chart.Visitor
-	HookExecutor    *chart.HookExecutor
-	Deleter         deletions.Deleter
-	ResourceFinder  *resources.Finder
+	DynamicClient  dynamic.Interface
+	Mapper         meta.RESTMapper
+	Visitor        chart.Visitor
+	HookExecutor   *chart.HookExecutor
+	Deleter        deletions.Deleter
+	ResourceFinder *resources.Finder
+	PVCPruner      *statefulset.PersistentVolumeClaimPruner
 
-	Namespace        string
-	EnforceNamespace bool
+	Namespace string
 }
 
 func NewDeleteOptions(streams genericclioptions.IOStreams) *DeleteOptions {
 	return &DeleteOptions{
 		IOStreams: streams,
-		Encoder:   yaml.NewEncoder(),
 	}
 }
 
-func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
+func (o *DeleteOptions) Complete(f cmdutil.Factory) error {
 	var err error
 
-	o.BuilderFactory = func() *resource.Builder {
-		return resource.NewBuilder(f)
-	}
-
-	o.Namespace, o.EnforceNamespace, err = f.ToRawKubeConfigLoader().Namespace()
+	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
 		return err
 	}
 
-	if o.DynamicClient == nil {
-		config, err := f.ToRESTConfig()
-		if err != nil {
-			return err
-		}
-
-		o.DynamicClient, err = dynamic.NewForConfig(config)
-		if err != nil {
-			return err
-		}
-	}
-
-	o.DynamicClient, err = o.DynamicClientGetter.Get(f)
-	if err != nil {
-		return err
-	}
-
-	o.DiscoveryClient, err = f.ToDiscoveryClient()
+	o.DynamicClient, err = f.DynamicClient()
 	if err != nil {
 		return err
 	}
@@ -128,7 +97,12 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 	}
 
 	if o.Prune {
-		o.ResourceFinder = resources.NewFinder(o.DiscoveryClient, o.DynamicClient, o.Mapper)
+		discoveryClient, err := f.ToDiscoveryClient()
+		if err != nil {
+			return err
+		}
+
+		o.ResourceFinder = resources.NewFinder(discoveryClient, o.DynamicClient, o.Mapper)
 	}
 
 	p := o.PrintFlags.ToPrinter(o.DryRun)
@@ -152,6 +126,12 @@ func (o *DeleteOptions) Complete(f genericclioptions.RESTClientGetter) error {
 
 	o.Visitor = chart.NewReverseVisitor(visitor)
 
+	o.PVCPruner = statefulset.NewPersistentVolumeClaimPruner(
+		o.DynamicClient,
+		o.Deleter,
+		o.Mapper,
+	)
+
 	return err
 }
 
@@ -165,41 +145,18 @@ func (o *DeleteOptions) Run() error {
 	})
 }
 
-func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
-	var err error
-	var infos []*resource.Info
-
+func (o *DeleteOptions) getResourceInfos(c *chart.Chart) ([]*resource.Info, error) {
 	if o.Prune {
-		infos, err = o.ResourceFinder.FindByLabelSelector(chart.LabelSelector(c))
-	} else {
-		var buf []byte
-
-		buf, err = o.Encoder.Encode(c.Resources)
-		if err != nil {
-			return err
-		}
-
-		result := o.BuilderFactory().
-			Unstructured().
-			ContinueOnError().
-			NamespaceParam(o.Namespace).DefaultNamespace().
-			Stream(bytes.NewBuffer(buf), c.Config.Name).
-			Flatten().
-			Do().
-			IgnoreErrors(errors.IsNotFound)
-		if err = result.Err(); err != nil {
-			return err
-		}
-
-		infos, err = result.Infos()
+		return o.ResourceFinder.FindByLabelSelector(chart.LabelSelector(c))
 	}
 
-	if err != nil {
+	return resources.ToInfoList(c.Resources, o.Mapper)
+}
+
+func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
+	infos, err := o.getResourceInfos(c)
+	if err != nil || len(infos) == 0 {
 		return err
-	}
-
-	if len(infos) == 0 {
-		return nil
 	}
 
 	resources.SortInfosByKind(infos, resources.DeleteOrder)
@@ -220,15 +177,6 @@ func (o *DeleteOptions) DeleteChart(c *chart.Chart) error {
 	}
 
 	deletedObjs := resources.ToObjectList(infos)
-	if len(deletedObjs) == 0 {
-		return nil
-	}
 
-	pvcPruner := &statefulset.PersistentVolumeClaimPruner{
-		Deleter:       o.Deleter,
-		DynamicClient: o.DynamicClient,
-		Mapper:        o.Mapper,
-	}
-
-	return pvcPruner.PruneClaims(deletedObjs)
+	return o.PVCPruner.PruneClaims(deletedObjs)
 }

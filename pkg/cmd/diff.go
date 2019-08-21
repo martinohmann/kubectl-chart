@@ -12,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
 	"k8s.io/kubectl/pkg/cmd/apply"
 	kdiff "k8s.io/kubectl/pkg/cmd/diff"
@@ -30,7 +32,7 @@ type DryRunVerifier interface {
 	HasSupport(gvk schema.GroupVersionKind) error
 }
 
-func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.IOStreams) *cobra.Command {
+func NewDiffCmd(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewDiffOptions(streams)
 
 	cmd := &cobra.Command{
@@ -54,19 +56,21 @@ func NewDiffCmd(f genericclioptions.RESTClientGetter, streams genericclioptions.
 	o.ChartFlags.AddFlags(cmd)
 	o.DiffFlags.AddFlags(cmd)
 
+	cmd.Flags().BoolVar(&o.Prune, "prune", o.Prune, "If true, chart resources not present anymore in the rendered chart manifest will be printed as deletions in the diff.")
+
 	return cmd
 }
 
 type DiffOptions struct {
 	genericclioptions.IOStreams
-	DynamicClientGetter
+	cmdutil.Factory
 
 	ChartFlags ChartFlags
 	DiffFlags  DiffFlags
+	Prune      bool
 
 	OpenAPISchema  openapi.Resources
 	DryRunVerifier DryRunVerifier
-	BuilderFactory func() *resource.Builder
 	DiffPrinter    diff.Printer
 	Encoder        resources.Encoder
 	Visitor        chart.Visitor
@@ -79,34 +83,27 @@ func NewDiffOptions(streams genericclioptions.IOStreams) *DiffOptions {
 		IOStreams: streams,
 		DiffFlags: NewDefaultDiffFlags(),
 		Encoder:   yaml.NewEncoder(),
+		Prune:     true,
 	}
 }
 
-func (o *DiffOptions) Complete(f genericclioptions.RESTClientGetter) error {
-	var err error
-
+func (o *DiffOptions) Complete(f cmdutil.Factory) error {
+	o.Factory = f
 	o.DiffPrinter = o.DiffFlags.ToPrinter()
-
-	o.BuilderFactory = func() *resource.Builder {
-		return resource.NewBuilder(f)
-	}
 
 	discoveryClient, err := f.ToDiscoveryClient()
 	if err != nil {
 		return err
 	}
 
-	dynamicClient, err := o.DynamicClientGetter.Get(f)
+	dynamicClient, err := f.DynamicClient()
 	if err != nil {
 		return err
 	}
 
-	o.DryRunVerifier = &apply.DryRunVerifier{
-		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(dynamicClient)),
-		OpenAPIGetter: discoveryClient,
-	}
+	o.DryRunVerifier = newDryRunVerifier(dynamicClient, discoveryClient)
 
-	o.OpenAPISchema, err = openapi.NewOpenAPIGetter(discoveryClient).Get()
+	o.OpenAPISchema, err = f.OpenAPISchema()
 	if err != nil {
 		return err
 	}
@@ -162,7 +159,7 @@ func (o *DiffOptions) diffRenderedResources(c *chart.Chart) error {
 
 	kprinter := kdiff.Printer{}
 
-	r := o.BuilderFactory().
+	r := o.NewBuilder().
 		Unstructured().
 		NamespaceParam(o.Namespace).DefaultNamespace().
 		Stream(bytes.NewBuffer(buf), c.Config.Name).
@@ -230,7 +227,11 @@ func (o *DiffOptions) diffRenderedResources(c *chart.Chart) error {
 // It will produce a deletion diff for resources that have been removed from
 // the helm chart but which are still present in the cluster.
 func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
-	r := o.BuilderFactory().
+	if !o.Prune {
+		return nil
+	}
+
+	r := o.NewBuilder().
 		Unstructured().
 		AllNamespaces(true).
 		LabelSelectorParam(chart.LabelSelector(c)).
@@ -247,17 +248,24 @@ func (o *DiffOptions) diffRemovedResources(c *chart.Chart) error {
 			return err
 		}
 
-		infoObj := kdiff.InfoObject{Info: info}
+		obj := kdiff.InfoObject{Info: info}
 
-		_, found := resources.FindMatchingObject(c.Resources, infoObj.Live())
+		_, found := resources.FindMatchingObject(c.Resources, obj.Live())
 		if found {
 			// Objects still present in the chart do not need to be diffed
 			// again as this already happened in diffRenderedResources.
 			return nil
 		}
 
-		differ := diff.NewRemovalDiffer(infoObj.Name(), infoObj.Live())
+		differ := diff.NewRemovalDiffer(obj.Name(), obj.Live())
 
 		return differ.Print(o.DiffPrinter, o.Out)
 	})
+}
+
+func newDryRunVerifier(dynamicClient dynamic.Interface, discoveryClient discovery.DiscoveryInterface) *apply.DryRunVerifier {
+	return &apply.DryRunVerifier{
+		Finder:        cmdutil.NewCRDFinder(cmdutil.CRDFromDynamic(dynamicClient)),
+		OpenAPIGetter: discoveryClient,
+	}
 }
